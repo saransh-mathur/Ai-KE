@@ -1,0 +1,6 @@
+{
+  "name": "Enterprise IT Asset & Vendor Semantic Knowledge Engine",
+  "description": "Production architecture workbench and hybrid retrieval simulator combining PostgreSQL relational metadata, pgvector semantic search, and multi-hop knowledge graph reasoning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
