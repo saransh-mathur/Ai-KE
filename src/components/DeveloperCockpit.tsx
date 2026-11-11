@@ -66,6 +66,13 @@ export const DeveloperCockpit: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
   const [savedToDb, setSavedToDb] = useState<boolean>(false);
 
+  // AI Engine & Provider State
+  const [aiProvider, setAiProvider] = useState<'auto' | 'gemini' | 'ollama' | 'deterministic'>('auto');
+  const [ollamaHost, setOllamaHost] = useState<string>('http://localhost:11434');
+  const [ollamaModel, setOllamaModel] = useState<string>('llama3');
+  const [aiAnswerText, setAiAnswerText] = useState<string | null>(null);
+  const [activeModelLabel, setActiveModelLabel] = useState<string>('Google Gemini / Deterministic');
+
   // Hybrid Analysis & Execution
   const queryAnalysis: QueryAnalysis = useMemo(() => {
     return parseNaturalLanguageQuery(queryInput);
@@ -83,8 +90,8 @@ export const DeveloperCockpit: React.FC = () => {
 
   const topResult = results[0];
 
-  // Synthesized Grounded Answer
-  const groundedAnswer = useMemo(() => {
+  // Default deterministic synthesis as fallback
+  const fallbackGroundedAnswer = useMemo(() => {
     if (results.length === 0) {
       return 'No matching enterprise IT assets or documentation met the specified criteria. Try loosening the region or vendor tier filters.';
     }
@@ -109,8 +116,54 @@ export const DeveloperCockpit: React.FC = () => {
 The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.name} (Tier ${topResult.vendor.tier}, ${topResult.asset.region}), which directly supports the ${topResult.businessUnit.name} division. All citations have been cross-verified against PostgreSQL master data and vector chunks.`;
   }, [results, topResult, queryInput]);
 
+  const displayAnswer = aiAnswerText || fallbackGroundedAnswer;
+
   const handleRunSearch = async () => {
     setIsSearching(true);
+
+    // Build context payload
+    const contextPayload = results.slice(0, 3).map((r, i) => `[Source ${i + 1}: ${r.chunk.document_title}]
+Vendor: ${r.vendor.name} (Tier ${r.vendor.tier}, Status: ${r.vendor.contract_status})
+Asset: ${r.asset.name} (Type: ${r.asset.type}, Region: ${r.asset.region})
+Business Unit: ${r.businessUnit.name} (Cost Center: ${r.businessUnit.cost_center})
+${r.incident ? `Incident: ${r.incident.title} (${r.incident.severity}) - Root Cause: ${r.incident.root_cause}` : 'No active incident'}
+Passage:
+${r.chunk.chunk_text}`).join('\n\n');
+
+    // Call backend AI generation endpoint if not strictly deterministic
+    if (aiProvider !== 'deterministic') {
+      try {
+        const aiRes = await fetch('/api/generate-ai-answer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: queryInput,
+            context: contextPayload,
+            provider: aiProvider,
+            ollamaHost,
+            ollamaModel,
+          }),
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          if (aiData.answer) {
+            setAiAnswerText(aiData.answer);
+            setActiveModelLabel(aiData.provider);
+          } else {
+            setAiAnswerText(null);
+            setActiveModelLabel(aiData.provider || 'Deterministic Engine');
+          }
+        }
+      } catch (err) {
+        console.warn('AI generation route unavailable, using local synthesis:', err);
+        setAiAnswerText(null);
+        setActiveModelLabel('Deterministic Engine (Local)');
+      }
+    } else {
+      setAiAnswerText(null);
+      setActiveModelLabel('Deterministic Grounding Engine');
+    }
 
     // Save to Cloud SQL audit log if user wishes
     try {
@@ -122,7 +175,7 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
         headers,
         body: JSON.stringify({
           queryText: queryInput,
-          filtersApplied: { region: selectedRegion, tier: selectedTier, maxResults },
+          filtersApplied: { region: selectedRegion, tier: selectedTier, maxResults, aiProvider },
           topResultDoc: topResult?.chunk.document_title || null,
           rrfScore: topResult?.rrfScore || null,
         }),
@@ -139,7 +192,7 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(groundedAnswer);
+    navigator.clipboard.writeText(displayAnswer);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -261,6 +314,43 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
                   <option value="vector_only">Vector Only (Disable Graph)</option>
                 </select>
               </div>
+
+              {/* AI Generation Provider Selection */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-slate-300 font-medium block">AI Synthesis Model (LLM Provider)</label>
+                <select
+                  value={aiProvider}
+                  onChange={(e) => setAiProvider(e.target.value as any)}
+                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                >
+                  <option value="auto">Auto (Google Gemini API with fallback)</option>
+                  <option value="gemini">Google Gemini API (gemini-2.5-flash Cloud)</option>
+                  <option value="ollama">Local Ollama LLM (llama3 / mistral on localhost:11434)</option>
+                  <option value="deterministic">Deterministic Engine (Local Rules, Zero Latency)</option>
+                </select>
+              </div>
+
+              {aiProvider === 'ollama' && (
+                <div className="space-y-1.5">
+                  <label className="text-slate-300 font-medium block">Ollama Host &amp; Model</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={ollamaHost}
+                      onChange={(e) => setOllamaHost(e.target.value)}
+                      placeholder="http://localhost:11434"
+                      className="w-2/3 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
+                    />
+                    <input
+                      type="text"
+                      value={ollamaModel}
+                      onChange={(e) => setOllamaModel(e.target.value)}
+                      placeholder="llama3"
+                      className="w-1/3 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -277,7 +367,12 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white tracking-tight">AI Grounded Answer</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white tracking-tight">AI Grounded Answer</h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  {activeModelLabel}
+                </span>
+              </div>
               <span className="text-xs text-slate-400">Grounded via PostgreSQL Master Data &amp; Incident Post-Mortems</span>
             </div>
           </div>
@@ -300,7 +395,7 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
 
         {/* Answer Text: Large, High-Readability Typography */}
         <div className="text-base sm:text-lg text-slate-100 leading-relaxed font-sans whitespace-pre-line">
-          {groundedAnswer}
+          {displayAnswer}
         </div>
 
         {/* Clean Entity Provenance Tags */}
