@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Header } from './components/Header.tsx';
+import { Header, MainNavTab } from './components/Header.tsx';
 import { ArchitectureDiagram } from './components/ArchitectureDiagram.tsx';
 import { SchemaViewer } from './components/SchemaViewer.tsx';
 import { DeveloperCockpit } from './components/DeveloperCockpit.tsx';
 import { GraphExplorer } from './components/GraphExplorer.tsx';
 import { CodePlayground } from './components/CodePlayground.tsx';
 import { LiveDatabaseExplorer } from './components/LiveDatabaseExplorer.tsx';
+import { WebhookIngestionHub } from './components/WebhookIngestionHub.tsx';
+import { MultiModalVisionStudio } from './components/MultiModalVisionStudio.tsx';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { Layers, Database, GitFork, Terminal, Download, Check } from 'lucide-react';
 import { downloadArchitectureReport, ArchitectureSubTab } from './lib/architecture-reports.ts';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'simulator' | 'architecture' | 'schema' | 'liveDb' | 'graph' | 'code'>('simulator');
+  const [activeTab, setActiveTab] = useState<MainNavTab>('simulator');
   const [archSubTab, setArchSubTab] = useState<ArchitectureSubTab>('blueprint');
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
 
@@ -46,7 +48,13 @@ export default function App() {
         {/* Main Content Area */}
         <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
           {/* Main Search View */}
-          {activeTab === 'simulator' && <DeveloperCockpit />}
+          {activeTab === 'simulator' && <DeveloperCockpit onNavigateToWebhooks={() => setActiveTab('webhooks')} />}
+
+          {/* Real-Time Webhook Pipeline Hub */}
+          {activeTab === 'webhooks' && <WebhookIngestionHub />}
+
+          {/* Multi-Modal Architecture Vision Studio */}
+          {activeTab === 'multimodal' && <MultiModalVisionStudio />}
 
           {/* Live Cloud SQL Explorer */}
           {activeTab === 'liveDb' && <LiveDatabaseExplorer />}

@@ -14,12 +14,34 @@ import {
   Layers,
   Database,
   ShieldAlert,
+  ShieldCheck,
   CheckCircle2,
-  FileText
+  FileText,
+  ThumbsUp,
+  ThumbsDown,
+  Lock,
+  EyeOff,
+  Radio,
+  MessageSquare,
+  AlertCircle,
+  HelpCircle,
+  X
 } from 'lucide-react';
-import { parseNaturalLanguageQuery, executeHybridRetrieval, QueryAnalysis } from '../lib/hybrid-search.ts';
-import { HybridSearchResult } from '../lib/types.ts';
+import {
+  parseNaturalLanguageQuery,
+  executeHybridRetrievalWithRbac,
+  QueryAnalysis
+} from '../lib/hybrid-search.ts';
+import {
+  HybridSearchResult,
+  SecurityClearanceLevel,
+  RedactedDocumentNotice
+} from '../lib/types.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+
+interface DeveloperCockpitProps {
+  onNavigateToWebhooks?: () => void;
+}
 
 const QUICK_PROMPTS = [
   {
@@ -48,7 +70,7 @@ const QUICK_PROMPTS = [
   },
 ];
 
-export const DeveloperCockpit: React.FC = () => {
+export const DeveloperCockpit: React.FC<DeveloperCockpitProps> = ({ onNavigateToWebhooks }) => {
   const { user, idToken } = useAuth();
 
   // Core Search State
@@ -57,6 +79,18 @@ export const DeveloperCockpit: React.FC = () => {
   const [selectedTier, setSelectedTier] = useState<string>(QUICK_PROMPTS[0].tier);
   const [maxResults, setMaxResults] = useState<number>(5);
   const [retrievalMode, setRetrievalMode] = useState<'hybrid' | 'vector_only'>('hybrid');
+
+  // RBAC Security Clearance State (L1 Public, L2 Ops SRE, L3 Security Admin)
+  const [securityClearance, setSecurityClearance] = useState<SecurityClearanceLevel>('L3_RESTRICTED');
+  const [showRedactedDetails, setShowRedactedDetails] = useState<boolean>(false);
+
+  // RLHF Feedback Loop & Dynamic RRF Parameters
+  const [feedbackRating, setFeedbackRating] = useState<'positive' | 'negative' | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<string>('Missing Graph Context');
+  const [feedbackNote, setFeedbackNote] = useState<string>('');
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+  const [dynamicRrfK, setDynamicRrfK] = useState<number>(60);
 
   // UI Disclosure State
   const [showFilters, setShowFilters] = useState<boolean>(false);
@@ -73,20 +107,25 @@ export const DeveloperCockpit: React.FC = () => {
   const [aiAnswerText, setAiAnswerText] = useState<string | null>(null);
   const [activeModelLabel, setActiveModelLabel] = useState<string>('Google Gemini / Deterministic');
 
-  // Hybrid Analysis & Execution
+  // Hybrid Analysis & Execution with RBAC Pre-filtering & Dynamic RRF
   const queryAnalysis: QueryAnalysis = useMemo(() => {
     return parseNaturalLanguageQuery(queryInput);
   }, [queryInput]);
 
-  const results: HybridSearchResult[] = useMemo(() => {
-    return executeHybridRetrieval(queryInput, queryAnalysis, {
+  const hybridExecution = useMemo(() => {
+    return executeHybridRetrievalWithRbac(queryInput, queryAnalysis, {
       applySqlFilters: retrievalMode !== 'vector_only',
       useGraphRank: retrievalMode !== 'vector_only',
       overrideRegion: selectedRegion,
       overrideTier: selectedTier,
+      userClearance: securityClearance,
+      kConstant: dynamicRrfK,
       maxResults,
     });
-  }, [queryInput, queryAnalysis, retrievalMode, selectedRegion, selectedTier, maxResults]);
+  }, [queryInput, queryAnalysis, retrievalMode, selectedRegion, selectedTier, securityClearance, dynamicRrfK, maxResults]);
+
+  const results: HybridSearchResult[] = hybridExecution.results;
+  const redactedNotices: RedactedDocumentNotice[] = hybridExecution.redactedNotices;
 
   const topResult = results[0];
 
@@ -117,6 +156,57 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
   }, [results, topResult, queryInput]);
 
   const displayAnswer = aiAnswerText || fallbackGroundedAnswer;
+
+  const handleThumbsUp = async () => {
+    setFeedbackRating('positive');
+    setFeedbackToast('Feedback recorded! RRF parameters reinforced in RLHF training dataset.');
+    setTimeout(() => setFeedbackToast(null), 3500);
+
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queryText: queryInput,
+          answerSnippet: displayAnswer.slice(0, 240),
+          rating: 'positive',
+          selectedDocId: topResult?.chunk.id,
+          rrfWeightAdjustment: { kAdjustment: 0, positiveReinforcement: true },
+        }),
+      });
+    } catch (e) {
+      console.warn('Feedback submission error:', e);
+    }
+  };
+
+  const handleOpenNegativeFeedback = () => {
+    setShowFeedbackModal(true);
+  };
+
+  const handleSubmitNegativeFeedback = async () => {
+    setFeedbackRating('negative');
+    setShowFeedbackModal(false);
+    setDynamicRrfK(65); // Dynamically offsets RRF k factor to favor higher graph-constraint precision
+    setFeedbackToast('Feedback recorded! Dynamic RRF k parameter offset to 65 for tighter rank precision.');
+    setTimeout(() => setFeedbackToast(null), 4000);
+
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queryText: queryInput,
+          answerSnippet: displayAnswer.slice(0, 240),
+          rating: 'negative',
+          feedbackNote: `[${feedbackCategory}] ${feedbackNote}`.trim(),
+          selectedDocId: topResult?.chunk.id,
+          rrfWeightAdjustment: { kAdjustment: 5, category: feedbackCategory },
+        }),
+      });
+    } catch (e) {
+      console.warn('Feedback submission error:', e);
+    }
+  };
 
   const handleRunSearch = async () => {
     setIsSearching(true);
@@ -246,26 +336,83 @@ ${r.chunk.chunk_text}`).join('\n\n');
             ))}
           </div>
 
-          {/* Controls Bar: Advanced Filters Disclosure + Big Action Button */}
-          <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-white px-3 py-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-750 transition-colors w-fit"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Advanced Filters</span>
-              {hasActiveFilters && (
-                <span className="w-2 h-2 rounded-full bg-indigo-400" />
+          {/* Controls Bar: Advanced Filters, RBAC Switcher, and Search Button */}
+          <div className="pt-2 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-750 transition-colors"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Filters</span>
+                {hasActiveFilters && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                )}
+                {showFilters ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
+              </button>
+
+              {/* RBAC Security Clearance Selector */}
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                <span className="text-[10px] text-slate-400 font-mono px-1 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-indigo-400" /> Clearance:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSecurityClearance('L1_PUBLIC')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
+                    securityClearance === 'L1_PUBLIC'
+                      ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Level 1: Public Staff (Redacts confidential contracts & SEV-1 root cause postmortems)"
+                >
+                  L1 Public
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSecurityClearance('L2_CONFIDENTIAL')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
+                    securityClearance === 'L2_CONFIDENTIAL'
+                      ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Level 2: Operations SRE (Access to standard runbooks and SEV-2 tickets)"
+                >
+                  L2 SRE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSecurityClearance('L3_RESTRICTED')}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
+                    securityClearance === 'L3_RESTRICTED'
+                      ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Level 3: Security Admin / CISO (Unrestricted access to all incidents and executive contracts)"
+                >
+                  L3 Admin
+                </button>
+              </div>
+
+              {onNavigateToWebhooks && (
+                <button
+                  type="button"
+                  onClick={onNavigateToWebhooks}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-750 text-slate-300 hover:text-white text-xs font-medium transition-colors"
+                  title="Open Real-Time Webhook Pipeline Hub"
+                >
+                  <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+                  <span>Live Webhooks</span>
+                </button>
               )}
-              {showFilters ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
-            </button>
+            </div>
 
             <button
               type="button"
               onClick={handleRunSearch}
               disabled={isSearching}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50"
+              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50 shrink-0"
             >
               <Sparkles className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
               <span>{isSearching ? 'Synthesizing...' : 'Run Intelligent Search'}</span>
@@ -356,6 +503,90 @@ ${r.chunk.chunk_text}`).join('\n\n');
         </div>
       </section>
 
+      {/* Feedback Toast Notification */}
+      {feedbackToast && (
+        <div className="bg-emerald-950/80 border border-emerald-500/50 rounded-xl px-4 py-3 flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-2.5 text-xs text-emerald-200">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{feedbackToast}</span>
+          </div>
+          <button
+            onClick={() => setFeedbackToast(null)}
+            className="text-emerald-400 hover:text-emerald-200 text-xs p-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* RBAC Security Clearance Pre-Filtering Redaction Banner */}
+      {redactedNotices.length > 0 && (
+        <div className="bg-amber-950/40 border border-amber-600/40 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-sm font-semibold text-amber-200">
+                    Vector Space RBAC Pre-Filtering Active ({redactedNotices.length} documents redacted)
+                  </h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    Clearance: {securityClearance}
+                  </span>
+                </div>
+                <p className="text-xs text-amber-300/80 leading-relaxed font-sans">
+                  Your security clearance restricted access to {redactedNotices.length} high-similarity documents (such as confidential vendor pricing or SEV-1 incident root cause post-mortems) before candidate generation. These documents were mathematically pruned from vector space to guarantee zero token leakage into the LLM context window.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowRedactedDetails(!showRedactedDetails)}
+              className="text-xs px-2.5 py-1 rounded-lg bg-amber-900/40 hover:bg-amber-900/70 border border-amber-600/30 text-amber-200 hover:text-white transition-colors shrink-0 flex items-center gap-1"
+            >
+              <EyeOff className="w-3 h-3" />
+              <span>{showRedactedDetails ? 'Hide Pruned Docs' : 'Inspect Pruned Docs'}</span>
+            </button>
+          </div>
+
+          {/* Collapsible Details of Redacted Documents */}
+          {showRedactedDetails && (
+            <div className="mt-3 pt-3 border-t border-amber-700/30 space-y-2">
+              <span className="text-[11px] font-mono text-amber-400 block uppercase tracking-wider">
+                Pruned Vectors (Pre-Filtered from RRF Candidate Pool):
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                {redactedNotices.map((notice, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-slate-950/80 border border-amber-900/50 flex flex-col justify-between space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-200 truncate">{notice.documentTitle}</span>
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0">
+                        Requires: {notice.requiredClearance}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                      <span>Cosine Similarity: {notice.vectorSimilarity.toFixed(3)}</span>
+                      <span className="text-amber-400 flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> Redacted
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 italic">
+                      {notice.reason}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* =================================================================== */}
       {/* STEP 2: The Primary Focal Point — Grounded AI Answer Card          */}
       {/* =================================================================== */}
@@ -372,12 +603,47 @@ ${r.chunk.chunk_text}`).join('\n\n');
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
                   {activeModelLabel}
                 </span>
+                {dynamicRrfK !== 60 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                    RLHF k={dynamicRrfK}
+                  </span>
+                )}
               </div>
               <span className="text-xs text-slate-400">Grounded via PostgreSQL Master Data &amp; Incident Post-Mortems</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* RLHF Feedback Loop Buttons (Thumbs Up / Thumbs Down) */}
+            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 mr-1">
+              <button
+                type="button"
+                onClick={handleThumbsUp}
+                className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs ${
+                  feedbackRating === 'positive'
+                    ? 'bg-emerald-600 text-white font-semibold'
+                    : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-850'
+                }`}
+                title="Accurate Answer: Logs positive reinforcement to RLHF fine-tuning dataset"
+              >
+                <ThumbsUp className="w-3.5 h-3.5" />
+                <span className="text-[11px] hidden sm:inline">Helpful</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenNegativeFeedback}
+                className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs ${
+                  feedbackRating === 'negative'
+                    ? 'bg-rose-600 text-white font-semibold'
+                    : 'text-slate-400 hover:text-rose-400 hover:bg-slate-850'
+                }`}
+                title="Report Inaccuracy: Opens feedback modal and dynamically re-tunes RRF parameter"
+              >
+                <ThumbsDown className="w-3.5 h-3.5" />
+                <span className="text-[11px] hidden sm:inline">Issue</span>
+              </button>
+            </div>
+
             {savedToDb && (
               <span className="text-xs text-emerald-400 flex items-center gap-1 font-mono">
                 <Check className="w-3.5 h-3.5" /> Saved
@@ -388,7 +654,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-medium border border-slate-700/80 transition-colors"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied' : 'Copy Answer'}</span>
+              <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         </div>
@@ -563,6 +829,91 @@ ${r.chunk.chunk_text}`).join('\n\n');
           </div>
         )}
       </section>
+
+      {/* =================================================================== */}
+      {/* RLHF Negative Feedback & Dynamic RRF Tuning Modal                   */}
+      {/* =================================================================== */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                  <ThumbsDown className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Log Retrieval Inaccuracy</h3>
+                  <p className="text-xs text-slate-400">RLHF training signal &amp; dynamic RRF weight tuning</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFeedbackModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-slate-300 font-medium block mb-1">Issue Category</label>
+                <select
+                  value={feedbackCategory}
+                  onChange={(e) => setFeedbackCategory(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                >
+                  <option value="Missing Graph Context">Missing Graph Context (Hop disconnected between vendor &amp; asset)</option>
+                  <option value="Hallucinated Entity Detail">Hallucinated Entity Detail (Spec or metric not grounded in master data)</option>
+                  <option value="Incorrect Incident Correlation">Incorrect Incident Correlation (Wrong severity or root cause)</option>
+                  <option value="Stale Policy or SLA">Stale Policy or SLA (Outdated vendor contract clause)</option>
+                  <option value="Semantic Drift">Semantic Drift (Vector chunk top match had low relevance)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-medium block mb-1">
+                  Correction / Engineer Note (Optional)
+                </label>
+                <textarea
+                  value={feedbackNote}
+                  onChange={(e) => setFeedbackNote(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Expected SRV-Alpha to link directly to CC-SEC-0010 without relying on secondary incident notes..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 resize-none"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-2 font-mono text-[11px] text-indigo-300">
+                  <Binary className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Dynamic Parameter Adjustment:</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Submitting this correction sets the local session RRF constant to <strong className="text-white font-mono">k = 65</strong> (tighter rank curve, punishing low-scoring vector noise) and appends this pair to the PostgreSQL <code className="text-slate-300">feedback_logs</code> table for future retrieval model fine-tuning.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowFeedbackModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitNegativeFeedback}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/25 transition-all"
+              >
+                Submit Correction &amp; Re-tune RRF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

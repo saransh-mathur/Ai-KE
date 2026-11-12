@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Network, Database, Sparkles, BookOpen, LogIn, LogOut, ShieldCheck, ChevronDown, CheckCircle2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 
+export type MainNavTab = 'simulator' | 'webhooks' | 'multimodal' | 'liveDb' | 'architecture' | 'schema' | 'graph' | 'code';
+
 interface HeaderProps {
-  activeTab: 'simulator' | 'architecture' | 'schema' | 'liveDb' | 'graph' | 'code';
-  setActiveTab: (tab: 'simulator' | 'architecture' | 'schema' | 'liveDb' | 'graph' | 'code') => void;
+  activeTab: MainNavTab;
+  setActiveTab: (tab: MainNavTab) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
@@ -46,6 +48,29 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
               }`}
             >
               Search
+            </button>
+
+            <button
+              onClick={() => setActiveTab('webhooks')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'webhooks'
+                  ? 'bg-slate-800 text-white shadow-sm font-semibold'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Webhooks</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('multimodal')}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'multimodal'
+                  ? 'bg-slate-800 text-white shadow-sm font-semibold'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              Vision Studio
             </button>
 
             <button
@@ -177,6 +202,18 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             className={`px-2.5 py-1 rounded-lg shrink-0 ${activeTab === 'simulator' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400'}`}
           >
             Search
+          </button>
+          <button
+            onClick={() => setActiveTab('webhooks')}
+            className={`px-2.5 py-1 rounded-lg shrink-0 ${activeTab === 'webhooks' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400'}`}
+          >
+            Webhooks
+          </button>
+          <button
+            onClick={() => setActiveTab('multimodal')}
+            className={`px-2.5 py-1 rounded-lg shrink-0 ${activeTab === 'multimodal' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400'}`}
+          >
+            Vision
           </button>
           <button
             onClick={() => setActiveTab('liveDb')}

@@ -11,6 +11,10 @@ import {
   getAllKnowledgeChunks,
   recordSavedQuery,
   getRecentSavedQueries,
+  ingestLiveIncidentAlert,
+  getRecentWebhookEvents,
+  recordFeedbackLog,
+  getFeedbackStats,
 } from './src/db/queries.ts';
 
 dotenv.config();
@@ -270,6 +274,261 @@ ${context}`;
       res.status(500).json({ error: error.message || 'Generation failed' });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // 1. Real-Time Webhook Ingestion Pipeline (PagerDuty, Jira, CloudWatch)
+  // ---------------------------------------------------------------------------
+
+  app.post('/api/webhooks/incidents', async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const sourceHeader = req.headers['x-webhook-source'] as string;
+      const source = (sourceHeader || payload.source || 'pagerduty').toLowerCase();
+
+      // Normalize fields across PagerDuty, Jira, and AWS CloudWatch
+      let title = payload.title || payload.summary || payload.event_description || 'Unspecified Incident Alert';
+      let severity = payload.severity || payload.priority || 'SEV-2';
+      let rootCause = payload.rootCause || payload.details || payload.alarm_reason || 'Automated health check alert triggered by monitoring agent.';
+      let assetId = payload.assetId || payload.asset_id || 'ast-rds-01';
+      let downtimeMinutes = Number(payload.downtimeMinutes || payload.downtime_minutes || 15);
+      const alertId = payload.alertId || payload.id || `alert-${Date.now().toString().slice(-6)}`;
+
+      // PagerDuty payload mapping
+      if (source === 'pagerduty' && payload.event) {
+        title = payload.event.data?.title || payload.event.summary || title;
+        severity = payload.event.data?.urgency === 'high' ? 'SEV-1' : 'SEV-2';
+        rootCause = payload.event.data?.custom_details?.summary || rootCause;
+      }
+      // AWS CloudWatch alarm mapping
+      else if (source === 'cloudwatch' && payload.AlarmName) {
+        title = `AWS CloudWatch Alarm: ${payload.AlarmName}`;
+        severity = payload.NewStateValue === 'ALARM' ? 'SEV-1' : 'SEV-2';
+        rootCause = payload.NewStateReason || 'CloudWatch metric threshold breached cross-AZ.';
+      }
+      // Jira incident issue mapping
+      else if (source === 'jira' && payload.issue) {
+        title = `JIRA ${payload.issue.key}: ${payload.issue.fields?.summary || title}`;
+        severity = payload.issue.fields?.priority?.name?.includes('High') ? 'SEV-1' : 'SEV-2';
+        rootCause = payload.issue.fields?.description || rootCause;
+      }
+
+      // Ingest dynamically into Cloud SQL (incidents + knowledge_chunks + webhook_events)
+      const ingested = await ingestLiveIncidentAlert({
+        source,
+        alertId,
+        title,
+        severity,
+        rootCause,
+        assetId,
+        downtimeMinutes,
+        rawPayload: payload,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: `Successfully ingested ${severity} alert from ${source.toUpperCase()}`,
+        ingested,
+      });
+    } catch (error: any) {
+      console.error('Webhook ingestion error:', error);
+      res.status(500).json({ error: error.message || 'Webhook ingestion failed' });
+    }
+  });
+
+  // Recent webhook events log
+  app.get('/api/webhooks/recent', async (_req, res) => {
+    try {
+      const events = await getRecentWebhookEvents(15);
+      res.json(events);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch webhook events' });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 2. Automated Feedback Loop & RLHF Dataset Logging
+  // ---------------------------------------------------------------------------
+
+  app.post('/api/feedback', optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const {
+        queryText,
+        answerSnippet,
+        rating,
+        feedbackNote,
+        selectedDocId,
+        suggestedDocId,
+        rrfWeightAdjustment,
+      } = req.body;
+
+      if (!queryText || !rating) {
+        return res.status(400).json({ error: 'queryText and rating are required' });
+      }
+
+      let userEmail = 'guest@enterprise-engine.local';
+      if (req.user && req.user.email) {
+        userEmail = req.user.email;
+      }
+
+      const log = await recordFeedbackLog({
+        queryText,
+        answerSnippet: answerSnippet || 'N/A',
+        rating,
+        feedbackNote,
+        selectedDocId,
+        suggestedDocId,
+        userEmail,
+        rrfWeightAdjustment: rrfWeightAdjustment || {
+          kAdjustment: rating === 'positive' ? 0 : 5,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      res.status(201).json({
+        success: true,
+        message: `Logged ${rating} feedback to RLHF dataset.`,
+        feedback: log,
+      });
+    } catch (error: any) {
+      console.error('Feedback recording error:', error);
+      res.status(500).json({ error: error.message || 'Failed to record feedback' });
+    }
+  });
+
+  // RLHF Feedback Metrics & Recommended RRF Weights
+  app.get('/api/feedback/stats', async (_req, res) => {
+    try {
+      const stats = await getFeedbackStats();
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ error: 'Failed to fetch feedback stats' });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 3. Multi-Modal Document & Architecture Diagram Parsing
+  // ---------------------------------------------------------------------------
+
+  app.post('/api/multimodal/parse-diagram', async (req, res) => {
+    try {
+      const {
+        diagramPreset = 'aws_multi_az_payment',
+        diagramTitle = 'AWS Multi-AZ Payment Processing Architecture',
+        imageBase64,
+      } = req.body;
+
+      // Built-in high-fidelity presets for immediate zero-config exploration
+      const PRESET_TOPOLOGIES: Record<string, any> = {
+        aws_multi_az_payment: {
+          diagramTitle: 'AWS Multi-AZ Payment Processing Architecture',
+          cloudProvider: 'Amazon Web Services (AWS)',
+          detectedTopology: 'Multi-AZ Active-Passive Database Cluster with API Gateway Ingress & NVMe Storage Cache',
+          nodes: [
+            { id: 'diag-ast-01', name: 'AWS Aurora PostgreSQL Primary', type: 'database', vendor: 'Amazon Web Services (AWS)', region: 'us-east-1a', criticality: 'mission-critical', securityClearance: 'L3_RESTRICTED' },
+            { id: 'diag-ast-02', name: 'AWS Aurora Read Replica Standby', type: 'database', vendor: 'Amazon Web Services (AWS)', region: 'us-east-1b', criticality: 'mission-critical', securityClearance: 'L2_CONFIDENTIAL' },
+            { id: 'diag-ast-03', name: 'Payment Ingress API Gateway (NLB)', type: 'cloud_service', vendor: 'Amazon Web Services (AWS)', region: 'us-east-1', criticality: 'mission-critical', securityClearance: 'L1_PUBLIC' },
+            { id: 'diag-ast-04', name: 'Pure Storage NVMe Flash Cache Array', type: 'storage', vendor: 'Pure Storage Systems', region: 'us-east-1', criticality: 'mission-critical', securityClearance: 'L2_CONFIDENTIAL' },
+            { id: 'diag-ast-05', name: 'Cisco Spine Ingress Switch SW-01', type: 'network_switch', vendor: 'Cisco Systems Enterprise', region: 'us-east-1', criticality: 'business-operational', securityClearance: 'L1_PUBLIC' },
+          ],
+          edges: [
+            { source: 'diag-ast-03', target: 'diag-ast-01', relationship: 'ROUTES_TRAFFIC_TO', protocol: 'mTLS HTTPS' },
+            { source: 'diag-ast-01', target: 'diag-ast-02', relationship: 'REPLICATES_TO', protocol: 'Async WAL Stream' },
+            { source: 'diag-ast-01', target: 'diag-ast-04', relationship: 'IMPACTS', protocol: 'NVMe-oF Fiber' },
+            { source: 'diag-ast-05', target: 'diag-ast-03', relationship: 'PROTECTS', protocol: 'BGP EVPN' },
+          ],
+          extractedSlaRisks: [
+            'Single-AZ cross-connect bottleneck between Aurora Primary (us-east-1a) and Standby (us-east-1b)',
+            'NVMe Flash Cache relies on single SAN controller firmware SLA §14.2',
+            'Cross-region replication lag during microcode hypervisor patching',
+          ],
+        },
+        hybrid_cloud_backbone: {
+          diagramTitle: 'Global Hybrid Cloud & Financial Clearing Backbone',
+          cloudProvider: 'Hybrid (AWS + On-Prem + CloudScale EU)',
+          detectedTopology: 'Cross-Continent Multi-Cloud Spine-Leaf with Hardware Security Modules',
+          nodes: [
+            { id: 'diag-net-01', name: 'Cisco Nexus 9336C DC Core Spine', type: 'network_switch', vendor: 'Cisco Systems Enterprise', region: 'us-west-2', criticality: 'mission-critical', securityClearance: 'L2_CONFIDENTIAL' },
+            { id: 'diag-srv-01', name: 'SRV-Alpha (CloudScale V-101 EU)', type: 'server', vendor: 'Amazon Web Services (AWS)', region: 'europe-west1', criticality: 'mission-critical', securityClearance: 'L1_PUBLIC' },
+            { id: 'diag-db-01', name: 'Snowflake Analytics Core Cluster', type: 'cloud_service', vendor: 'Snowflake Computing Inc.', region: 'us-east-1', criticality: 'business-operational', securityClearance: 'L1_PUBLIC' },
+          ],
+          edges: [
+            { source: 'diag-net-01', target: 'diag-srv-01', relationship: 'ROUTES_TRAFFIC_TO', protocol: 'IPsec VPN Tunnel' },
+            { source: 'diag-srv-01', target: 'diag-db-01', relationship: 'REPLICATES_TO', protocol: 'Kafka CDC Pipe' },
+          ],
+          extractedSlaRisks: [
+            'Transatlantic transit latency spike during European GDPR data reconciliation runs',
+            'Cisco BGP flapping risk during MTU jumbo frame mismatch (>9000 bytes)',
+          ],
+        },
+      };
+
+      // 1. If Gemini API key is present and an image was provided, run Vision analysis
+      if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY' && imageBase64) {
+        try {
+          const { GoogleGenAI } = await import('@google/genai');
+          const ai = new GoogleGenAI({});
+
+          const visionPrompt = `You are an Enterprise Infrastructure Architect & Vision Parser.
+Analyze this architecture diagram image. Identify and extract:
+1. All infrastructure nodes (databases, servers, switches, cloud services, storage arrays) with their detected Vendor and Region.
+2. All relationship edges connecting them (e.g., ROUTES_TRAFFIC_TO, REPLICATES_TO, SUPPLIES, IMPACTS).
+3. Any single-point-of-failure or SLA risks shown in the topology.
+Format your output strictly as a JSON object matching this schema:
+{
+  "diagramTitle": "Extracted Diagram Title",
+  "cloudProvider": "AWS / Azure / GCP / Hybrid",
+  "detectedTopology": "Short summary",
+  "nodes": [{ "id": "ast-id", "name": "...", "type": "database|server|storage|network_switch|cloud_service", "vendor": "...", "region": "...", "criticality": "mission-critical", "securityClearance": "L1_PUBLIC|L2_CONFIDENTIAL|L3_RESTRICTED" }],
+  "edges": [{ "source": "ast-id-1", "target": "ast-id-2", "relationship": "ROUTES_TRAFFIC_TO", "protocol": "..." }],
+  "extractedSlaRisks": ["Risk 1", "Risk 2"]
+}`;
+
+          const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: [
+              {
+                inlineData: {
+                  mimeType: 'image/png',
+                  data: cleanBase64,
+                },
+              },
+              { text: visionPrompt },
+            ],
+          });
+
+          if (response && response.text) {
+            const jsonMatch = response.text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              return res.json({
+                success: true,
+                source: 'gemini-vision-extracted',
+                diagram: parsed,
+              });
+            }
+          }
+        } catch (visionErr: any) {
+          console.warn('Gemini vision extraction fallback to preset:', visionErr?.message);
+        }
+      }
+
+      // 2. Return high-fidelity preset topology
+      const selectedPreset = PRESET_TOPOLOGIES[diagramPreset] || PRESET_TOPOLOGIES.aws_multi_az_payment;
+      res.json({
+        success: true,
+        source: 'preset-vision-parser',
+        diagram: {
+          ...selectedPreset,
+          diagramTitle: diagramTitle || selectedPreset.diagramTitle,
+        },
+      });
+    } catch (error: any) {
+      console.error('Multi-modal diagram parsing error:', error);
+      res.status(500).json({ error: error.message || 'Diagram parsing failed' });
+    }
+  });
+
 
   // ---------------------------------------------------------------------------
   // Vite Integration (Development vs Production)

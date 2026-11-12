@@ -1,5 +1,29 @@
 import { MOCK_VENDORS, MOCK_ASSETS, MOCK_BUSINESS_UNITS, MOCK_INCIDENTS, MOCK_KNOWLEDGE_CHUNKS } from './mock-data.ts';
-import { HybridSearchResult, Vendor, Asset, BusinessUnit, Incident, KnowledgeChunk } from './types.ts';
+import {
+  HybridSearchResult,
+  Vendor,
+  Asset,
+  BusinessUnit,
+  Incident,
+  KnowledgeChunk,
+  SecurityClearanceLevel,
+  RedactedDocumentNotice,
+  HybridRetrievalExecutionResponse,
+} from './types.ts';
+
+export const CLEARANCE_HIERARCHY: Record<SecurityClearanceLevel, number> = {
+  L1_PUBLIC: 1,
+  L2_CONFIDENTIAL: 2,
+  L3_RESTRICTED: 3,
+};
+
+export function isAuthorized(
+  userClearance: SecurityClearanceLevel,
+  requiredClearance?: SecurityClearanceLevel
+): boolean {
+  const req = requiredClearance || 'L1_PUBLIC';
+  return CLEARANCE_HIERARCHY[userClearance] >= CLEARANCE_HIERARCHY[req];
+}
 
 export interface QueryAnalysis {
   originalQuery: string;
@@ -142,30 +166,34 @@ export interface HybridRetrievalOptions {
   useGraphRank?: boolean;
   overrideRegion?: string; // 'all' | 'us-east-1' | 'us-west-2' | 'europe-west1'
   overrideTier?: string;   // 'all' | '1' | '2' | '3'
+  userClearance?: SecurityClearanceLevel; // 'L1_PUBLIC' | 'L2_CONFIDENTIAL' | 'L3_RESTRICTED'
+  kConstant?: number;      // RRF k factor, default 60 or tuned via RLHF
   maxResults?: number;
 }
 
 /**
- * Executes the full hybrid retrieval pipeline:
- * 1. Filter structured tables (vendors, assets)
- * 2. Traverse Graph relationships (Vendor -> Asset -> BU -> Incident)
- * 3. Calculate Vector Cosine Similarity
- * 4. Combine via Reciprocal Rank Fusion (RRF)
+ * Executes the full hybrid retrieval pipeline with RBAC vector space pre-filtering:
+ * 1. Filter structured tables (vendors, assets) & security clearance
+ * 2. Redact restricted documents before RRF ranking
+ * 3. Traverse Graph relationships (Vendor -> Asset -> BU -> Incident)
+ * 4. Calculate Vector Cosine Similarity
+ * 5. Combine via Reciprocal Rank Fusion (RRF)
  */
-export function executeHybridRetrieval(
+export function executeHybridRetrievalWithRbac(
   query: string,
   analysis: QueryAnalysis,
-  options: HybridRetrievalOptions = { applySqlFilters: true, useGraphRank: true, maxResults: 5 }
-): HybridSearchResult[] {
+  options: HybridRetrievalOptions = {}
+): HybridRetrievalExecutionResponse {
   const {
     applySqlFilters = true,
     useGraphRank = true,
     overrideRegion,
     overrideTier,
+    userClearance = 'L3_RESTRICTED',
+    kConstant = 60,
     maxResults = 5,
   } = options;
 
-  // Build intermediate candidates
   const candidates: Array<{
     chunk: KnowledgeChunk;
     asset: Asset;
@@ -178,11 +206,43 @@ export function executeHybridRetrieval(
     hopPath: string[];
   }> = [];
 
+  const redactedNotices: RedactedDocumentNotice[] = [];
+  let evaluatedCount = 0;
+  let graphHopsCount = 0;
+
   for (const chunk of MOCK_KNOWLEDGE_CHUNKS) {
+    evaluatedCount++;
     const asset = MOCK_ASSETS.find(a => a.id === chunk.asset_id)!;
     const vendor = MOCK_VENDORS.find(v => v.id === asset.vendor_id)!;
     const businessUnit = MOCK_BUSINESS_UNITS.find(b => b.id === asset.business_unit_id)!;
     const incident = MOCK_INCIDENTS.find(i => i.asset_id === asset.id);
+
+    // Vector similarity score
+    const vectorScore = computeSimulatedCosineSimilarity(query, chunk);
+
+    // RBAC Security Clearance Pre-filter:
+    // Determine required clearance from chunk or linked incident
+    const chunkRequiredClearance: SecurityClearanceLevel =
+      chunk.security_clearance || chunk.metadata?.security_clearance || 'L1_PUBLIC';
+    const incidentRequiredClearance: SecurityClearanceLevel =
+      incident?.security_clearance || 'L1_PUBLIC';
+
+    const effectiveRequiredClearance: SecurityClearanceLevel =
+      CLEARANCE_HIERARCHY[incidentRequiredClearance] > CLEARANCE_HIERARCHY[chunkRequiredClearance]
+        ? incidentRequiredClearance
+        : chunkRequiredClearance;
+
+    // Check authorization: if user does not have sufficient clearance, REDACT from vector candidate space
+    if (!isAuthorized(userClearance, effectiveRequiredClearance)) {
+      redactedNotices.push({
+        id: chunk.id,
+        documentTitle: chunk.document_title,
+        requiredClearance: effectiveRequiredClearance,
+        vectorSimilarity: vectorScore,
+        reason: `Restricted under ${effectiveRequiredClearance} policy. Current session clearance (${userClearance}) is insufficient to access this document or incident log.`,
+      });
+      continue; // Exclude from RRF candidates
+    }
 
     // Relational SQL filter matching
     let sqlMatches = true;
@@ -209,9 +269,6 @@ export function executeHybridRetrieval(
       sqlMatches = false;
     }
 
-    // Vector similarity score
-    const vectorScore = computeSimulatedCosineSimilarity(query, chunk);
-
     // Graph relevance score (structural distance to query entities & multi-hop traversal)
     let graphScore = 0.5;
     const hopPath = [
@@ -219,9 +276,11 @@ export function executeHybridRetrieval(
       `--supplies--> [Asset: ${asset.name} (${asset.type})]`,
       `--impacts--> [BU: ${businessUnit.name}]`,
     ];
+    graphHopsCount += 3;
 
     if (incident) {
       hopPath.push(`--tied-to--> [Incident: ${incident.title} (${incident.severity})]`);
+      graphHopsCount += 1;
       graphScore += 0.3;
     }
     if (asset.criticality === 'mission-critical') {
@@ -263,7 +322,7 @@ export function executeHybridRetrieval(
   const results: HybridSearchResult[] = poolToRank.map(item => {
     const vRank = vectorRankMap.get(item.chunk.id) || 10;
     const gRank = useGraphRank ? (graphRankMap.get(item.chunk.id) || 10) : 0;
-    const rrfScore = calculateRRFScore(vRank, gRank);
+    const rrfScore = calculateRRFScore(vRank, gRank, kConstant);
 
     return {
       chunk: item.chunk,
@@ -282,5 +341,24 @@ export function executeHybridRetrieval(
   });
 
   // Sort by final RRF score descending and limit
-  return results.sort((a, b) => b.rrfScore - a.rrfScore).slice(0, maxResults);
+  const sortedResults = results.sort((a, b) => b.rrfScore - a.rrfScore).slice(0, maxResults);
+
+  return {
+    results: sortedResults,
+    redactedNotices: redactedNotices.sort((a, b) => b.vectorSimilarity - a.vectorSimilarity),
+    activeClearance: userClearance,
+    totalCandidatesEvaluated: evaluatedCount,
+    graphHopsResolved: graphHopsCount,
+  };
+}
+
+/**
+ * Legacy/Standard signature returning HybridSearchResult[] for direct consumers
+ */
+export function executeHybridRetrieval(
+  query: string,
+  analysis: QueryAnalysis,
+  options: HybridRetrievalOptions = { applySqlFilters: true, useGraphRank: true, maxResults: 5 }
+): HybridSearchResult[] {
+  return executeHybridRetrievalWithRbac(query, analysis, options).results;
 }

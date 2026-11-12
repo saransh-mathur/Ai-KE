@@ -189,6 +189,7 @@ export const MOCK_INCIDENTS: Incident[] = [
     asset_id: 'ast-rds-01',
     resolved_at: '2026-10-14T04:22:00Z',
     downtime_minutes: 47,
+    security_clearance: 'L3_RESTRICTED',
   },
   {
     id: 'inc-8842',
@@ -198,6 +199,7 @@ export const MOCK_INCIDENTS: Incident[] = [
     asset_id: 'ast-snw-01',
     resolved_at: '2026-09-28T18:15:00Z',
     downtime_minutes: 180,
+    security_clearance: 'L2_CONFIDENTIAL',
   },
   {
     id: 'inc-7719',
@@ -207,6 +209,17 @@ export const MOCK_INCIDENTS: Incident[] = [
     asset_id: 'ast-sw-01',
     resolved_at: '2026-08-11T11:40:00Z',
     downtime_minutes: 62,
+    security_clearance: 'L2_CONFIDENTIAL',
+  },
+  {
+    id: 'inc-9905',
+    title: 'Global Payment Gateway SSL Expiry Incident',
+    severity: 'SEV-3',
+    root_cause: 'Automated ACME certificate renewal script failed on backup proxy node, triggered canary warning.',
+    asset_id: 'ast-srv-01',
+    resolved_at: '2026-11-05T09:12:00Z',
+    downtime_minutes: 12,
+    security_clearance: 'L1_PUBLIC',
   },
 ];
 
@@ -217,11 +230,13 @@ export const MOCK_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
     document_title: 'POSTMORTEM-2026-10-14-aurora-lag.md',
     doc_type: 'incident_postmortem',
     chunk_index: 1,
-    chunk_text: `Post-Mortem: Incident INC-9021 (Severity 1). On October 14, 2026, Aurora PostgreSQL cluster aurora-pg-payments-prod experienced 47 minutes of severe replication lag across AZs in us-east-1. The root cause was an unannounced AWS hypervisor NIC microcode patch that saturated cross-AZ throughput, causing write queries to lock up. Payment Processing BU suffered 12% drop in transaction authorization throughput. Action items: implemented AWS Health API webhook alerts, added RDS multi-region failover automation with pg_auto_failover, and required Tier-1 cloud vendor SLA review regarding silent hypervisor patching.`,
+    security_clearance: 'L3_RESTRICTED',
+    chunk_text: `Post-Mortem: Incident INC-9021 (Severity 1 - RESTRICTED CLEARANCE). On October 14, 2026, Aurora PostgreSQL cluster aurora-pg-payments-prod experienced 47 minutes of severe replication lag across AZs in us-east-1. The root cause was an unannounced AWS hypervisor NIC microcode patch that saturated cross-AZ throughput, causing write queries to lock up. Payment Processing BU suffered 12% drop in transaction authorization throughput. Action items: implemented AWS Health API webhook alerts, added RDS multi-region failover automation with pg_auto_failover, and required Tier-1 cloud vendor SLA review regarding silent hypervisor patching.`,
     metadata: {
       author: 'incident-commander@enterprise.corp',
       last_reviewed: '2026-10-18',
       tags: ['SEV-1', 'aurora', 'replication_lag', 'aws', 'payments', 'root_cause'],
+      security_clearance: 'L3_RESTRICTED',
     },
   },
   {
@@ -230,11 +245,13 @@ export const MOCK_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
     document_title: 'SOP-DB-042-aurora-high-availability-runbook.md',
     doc_type: 'runbook',
     chunk_index: 2,
+    security_clearance: 'L2_CONFIDENTIAL',
     chunk_text: `Runbook: Database Failover Protocol for Tier-1 Assets. For aurora-pg-payments-prod (AWS RDS Aurora PostgreSQL), failover procedures require verifying sync lag via pg_stat_replication. In the event of primary degradation in us-east-1, run the automated promotion CLI script 'scripts/promote_replica.py --cluster=aurora-pg-payments-prod --force'. Ensure the payment ingress proxy is notified to redirect read-write pools to the new primary endpoint within 30 seconds.`,
     metadata: {
       author: 'database-reliability-eng@enterprise.corp',
       last_reviewed: '2026-11-01',
       tags: ['runbook', 'failover', 'aurora', 'sop', 'disaster_recovery'],
+      security_clearance: 'L2_CONFIDENTIAL',
     },
   },
   {
@@ -243,11 +260,13 @@ export const MOCK_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
     document_title: 'ARCH-SNOWFLAKE-WH-SPEC-2026.md',
     doc_type: 'architecture_spec',
     chunk_index: 1,
+    security_clearance: 'L1_PUBLIC',
     chunk_text: `Enterprise Data Warehouse Topology: snowflake-wh-analytics-core is deployed on AWS us-east-1 under Snowflake Enterprise Agreement. The warehouse is configured with 4X-Large clusters with auto-scaling between 1 and 6 instances. Ingestion feeds arrive via Kafka Snowpipe from Payment Processing transactional CDC logs. Contract status is Tier-1 Active with guaranteed 99.99% availability SLA and dedicated technical account management.`,
     metadata: {
       author: 'data-platform-arch@enterprise.corp',
       last_reviewed: '2026-09-15',
       tags: ['snowflake', 'architecture', 'tier-1', 'warehouse', 'data-eng'],
+      security_clearance: 'L1_PUBLIC',
     },
   },
   {
@@ -256,11 +275,13 @@ export const MOCK_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
     document_title: 'POSTMORTEM-2026-09-28-snowflake-starvation.md',
     doc_type: 'incident_postmortem',
     chunk_index: 1,
+    security_clearance: 'L2_CONFIDENTIAL',
     chunk_text: `Post-Mortem: Incident INC-8842 (Severity 2). Snowflake analytical warehouse starvation resulted in delayed executive and financial revenue reconciliations. A long-running unindexed recursive query lock blocked the daily revenue rollup job. Resolution: Implemented query timeout guardrails (STATEMENT_TIMEOUT_IN_SECONDS = 7200) and warehouse isolation for scheduled FinTech ETL vs ad-hoc analytics queries.`,
     metadata: {
       author: 'bi-operations@enterprise.corp',
       last_reviewed: '2026-10-02',
       tags: ['SEV-2', 'snowflake', 'query_timeout', 'finance', 'analytics'],
+      security_clearance: 'L2_CONFIDENTIAL',
     },
   },
   {
@@ -269,11 +290,13 @@ export const MOCK_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
     document_title: 'SLA-VENDOR-PURESTORAGE-2026.md',
     doc_type: 'vendor_sla',
     chunk_index: 1,
+    security_clearance: 'L1_PUBLIC',
     chunk_text: `Pure Storage Master Service Level Agreement & Hardware Replacement Policy. Assets including pure-flashblade-prod-va carry a 4-hour on-site chassis and blade replacement guarantee. Guaranteed uptime is 99.999% ('five nines'). Direct API integration monitors wear levels, IOPS thermal limits, and NVMe endurance metrics. Supports Payment Processing transaction audit archival under PCI-DSS Level 1 compliance.`,
     metadata: {
       author: 'procurement-legal@enterprise.corp',
       last_reviewed: '2026-06-20',
       tags: ['pure_storage', 'sla', 'hardware', 'nvme', 'pci_dss'],
+      security_clearance: 'L1_PUBLIC',
     },
   },
   {
@@ -282,11 +305,13 @@ export const MOCK_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
     document_title: 'POSTMORTEM-2026-08-11-cisco-bgp-flap.md',
     doc_type: 'incident_postmortem',
     chunk_index: 1,
+    security_clearance: 'L2_CONFIDENTIAL',
     chunk_text: `Post-Mortem: Incident INC-7719 (Severity 2). Spine switch cisco-nexus-9336c-spine-01 in us-west-2 experienced BGP neighbor flappings during cross-rack backup sync. Jumbo frame MTU mismatch between Cisco NX-OS and worker server pools triggered packet fragmentation and CRC errors. Action: Updated all switch interfaces to MTU 9216 and pinned NX-OS patch release 10.3(2a). Vendor Cisco contract is under review pending renewed hardware warranty terms.`,
     metadata: {
       author: 'network-ops@enterprise.corp',
       last_reviewed: '2026-08-20',
       tags: ['cisco', 'bgp', 'networking', 'mtu', 'SEV-2', 'nx-os'],
+      security_clearance: 'L2_CONFIDENTIAL',
     },
   },
   {
@@ -295,11 +320,29 @@ export const MOCK_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [
     document_title: 'SPEC-CLOUDSCALE-V101-EU-DEBIAN.md',
     doc_type: 'architecture_spec',
     chunk_index: 1,
+    security_clearance: 'L1_PUBLIC',
     chunk_text: `System Specification: SRV-Alpha (CloudScale V-101) deployed in region europe-west1 under CloudScale Enterprise Agreement. Configured with 64 AMD EPYC cores, 256GB ECC RAM, and 32TB NVMe scratch storage. Serves Cybersecurity & Compliance business unit for real-time automated audit log redaction and GDPR cross-border isolation. Integrated with zero-trust mTLS ingress proxy and automated failover mirrors.`,
     metadata: {
       author: 'platform-infra@enterprise.corp',
       last_reviewed: '2026-10-30',
       tags: ['cloudscale', 'srv-alpha', 'europe-west1', 'debian', 'tier-1', 'security'],
+      security_clearance: 'L1_PUBLIC',
+    },
+  },
+  {
+    id: 'chk-007-sec',
+    asset_id: 'ast-san-01',
+    document_title: 'CISO-RESTRICTED-AUDIT-NVME-VULNERABILITY.md',
+    doc_type: 'incident_postmortem',
+    chunk_index: 1,
+    security_clearance: 'L3_RESTRICTED',
+    chunk_text: `CISO Executive Briefing (STRICTLY RESTRICTED L3): Investigation into zero-day memory allocation vulnerability in SAN flash storage controllers. Pure Storage and Core FinTech teams patched microcode in staging within 4 hours. No unauthorized exfiltration occurred, but SLA compensation clause §14.2 was invoked. Disclosed to executive audit committee only.`,
+    metadata: {
+      author: 'ciso-office@enterprise.corp',
+      last_reviewed: '2026-11-04',
+      tags: ['ciso', 'zero-day', 'restricted', 'audit', 'SEV-1', 'confidential'],
+      security_clearance: 'L3_RESTRICTED',
     },
   },
 ];
+

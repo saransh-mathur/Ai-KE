@@ -100,6 +100,33 @@ export const savedQueries = pgTable('saved_queries', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// 8. Webhook Events (Real-Time Ingestion from PagerDuty, Jira, CloudWatch)
+export const webhookEvents = pgTable('webhook_events', {
+  id: serial('id').primaryKey(),
+  source: text('source').notNull(), // 'pagerduty', 'jira', 'cloudwatch', 'simulator'
+  eventAction: text('event_action').notNull(),
+  rawPayload: jsonb('raw_payload').default({}).notNull(),
+  extractedAssetId: text('extracted_asset_id'),
+  generatedIncidentId: text('generated_incident_id'),
+  generatedChunkId: text('generated_chunk_id'),
+  status: text('status').default('processed').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// 9. Feedback Logs (Automated Feedback Loop & RLHF Dataset)
+export const feedbackLogs = pgTable('feedback_logs', {
+  id: serial('id').primaryKey(),
+  queryText: text('query_text').notNull(),
+  answerSnippet: text('answer_snippet').notNull(),
+  rating: text('rating').notNull(), // 'positive' | 'negative'
+  feedbackNote: text('feedback_note'),
+  selectedDocId: text('selected_doc_id'),
+  suggestedDocId: text('suggested_doc_id'),
+  userEmail: text('user_email').default('guest@enterprise-engine.local').notNull(),
+  rrfWeightAdjustment: jsonb('rrf_weight_adjustment').default({}).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   savedQueries: many(savedQueries),
@@ -146,3 +173,4 @@ export const savedQueriesRelations = relations(savedQueries, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
