@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Network, Database, Sparkles, BookOpen, LogIn, LogOut, ShieldCheck, ChevronDown, CheckCircle2, X } from 'lucide-react';
+import { Network, Database, Sparkles, BookOpen, LogIn, LogOut, ShieldCheck, ShieldAlert, ChevronDown, CheckCircle2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 
 export type MainNavTab = 'simulator' | 'webhooks' | 'multimodal' | 'liveDb' | 'architecture' | 'schema' | 'graph' | 'code';
@@ -10,7 +10,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
-  const { user, dbUser, signInWithGoogle, signOutUser, loading } = useAuth();
+  const { user, dbUser, signInWithGoogle, signOutUser, loading, isSsoConfigured } = useAuth();
   const [showStatusPopover, setShowStatusPopover] = useState<boolean>(false);
 
   return (
@@ -131,9 +131,15 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                     </div>
                     <div className="flex items-center justify-between text-slate-300">
                       <span>Firebase Auth (Google SSO):</span>
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> Active
-                      </span>
+                      {isSsoConfigured ? (
+                        <span className="text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Active
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 flex items-center gap-1">
+                          <ShieldAlert className="w-3 h-3" /> Demo Mode
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between text-slate-300">
                       <span>Drizzle ORM + Pool:</span>
@@ -159,9 +165,9 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             {/* Auth Profile / Sign In */}
             {loading ? (
               <div className="w-8 h-8 rounded-full bg-slate-800 animate-pulse" />
-            ) : user ? (
+            ) : (user || dbUser) ? (
               <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 py-1 px-2.5 rounded-xl">
-                {user.photoURL ? (
+                {user?.photoURL ? (
                   <img
                     src={user.photoURL}
                     alt={user.displayName || 'User'}
@@ -169,11 +175,11 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                   />
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-indigo-600/40 text-indigo-300 flex items-center justify-center text-[10px] font-bold">
-                    {user.displayName?.[0] || user.email?.[0] || 'U'}
+                    {(user?.displayName || dbUser?.displayName || user?.email || dbUser?.email || 'U')[0]}
                   </div>
                 )}
                 <span className="hidden sm:inline text-xs text-slate-200 font-medium max-w-[100px] truncate">
-                  {user.displayName?.split(' ')[0] || user.email?.split('@')[0]}
+                  {(user?.displayName || dbUser?.displayName || user?.email || dbUser?.email || 'User').split(' ')[0]}
                 </span>
                 <button
                   onClick={signOutUser}

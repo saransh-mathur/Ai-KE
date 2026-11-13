@@ -6,3 +6,12 @@ coverage/
 *.log
 .env*
 !.env.example
+.playwright-cli/
+
+# Sensitive Firebase & Google Cloud Credentials (prevents key exposure and unwanted charges)
+firebase-applet-config.json
+serviceAccountKey*.json
+*.pem
+*.key
+credentials*.json
+*.credentials.json

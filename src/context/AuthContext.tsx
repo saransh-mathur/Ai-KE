@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onIdTokenChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { auth, googleAuthProvider } from '../lib/firebase.ts';
+import { auth, googleAuthProvider, isConfigured } from '../lib/firebase.ts';
 
 export interface DbUser {
   id: number;
@@ -17,6 +17,7 @@ interface AuthContextType {
   idToken: string | null;
   dbUser: DbUser | null;
   loading: boolean;
+  isSsoConfigured: boolean;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
 }
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextType>({
   idToken: null,
   dbUser: null,
   loading: true,
+  isSsoConfigured: true,
   signInWithGoogle: async () => {},
   signOutUser: async () => {},
 });
@@ -37,6 +39,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    if (!isConfigured) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -71,6 +78,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = async () => {
+    // If running in an unconfigured or cloned repository without own credentials
+    if (!isConfigured) {
+      const demoToken = 'demo-token-local-engineer';
+      setIdToken(demoToken);
+      setDbUser({
+        id: 999,
+        uid: 'demo-local-engineer',
+        email: 'demo.engineer@enterprise.internal',
+        displayName: 'Demo Engineer (Local)',
+        photoURL: null,
+        role: 'engineer',
+        createdAt: new Date().toISOString(),
+      });
+      return;
+    }
+
     try {
       await signInWithPopup(auth, googleAuthProvider);
     } catch (error) {
@@ -80,6 +103,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOutUser = async () => {
+    if (!isConfigured) {
+      setUser(null);
+      setIdToken(null);
+      setDbUser(null);
+      return;
+    }
+
     try {
       await signOut(auth);
     } catch (error) {
@@ -95,6 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         idToken,
         dbUser,
         loading,
+        isSsoConfigured: isConfigured,
         signInWithGoogle,
         signOutUser,
       }}
