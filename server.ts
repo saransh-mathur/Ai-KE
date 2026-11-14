@@ -151,11 +151,13 @@ async function startServer() {
     }
   });
 
-  // Check AI Provider availability (Gemini API vs Local Ollama)
+  // Check AI Provider availability (Gemini API, Custom Online API, vs Local Ollama)
   app.get('/api/ai-status', (_req, res) => {
     res.json({
-      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'),
       geminiModel: 'gemini-3.8-flash',
+      customOnlineAiConfigured: Boolean(process.env.CUSTOM_AI_API_KEY),
+      customOnlineAiModel: process.env.CUSTOM_AI_MODEL || 'gpt-4o-mini',
       localOllamaSupported: true,
       defaultOllamaHost: process.env.OLLAMA_HOST || 'http://localhost:11434',
       defaultOllamaModel: 'llama3',
@@ -163,7 +165,7 @@ async function startServer() {
     });
   });
 
-  // Generate grounded AI response using Gemini API or Local Ollama
+  // Generate grounded AI response using Gemini API, Custom Online AI API, or Local Ollama
   app.post('/api/generate-ai-answer', async (req, res) => {
     try {
       const {
@@ -217,7 +219,7 @@ ${context}`;
           console.warn('Gemini generation fallback:', geminiError?.message || geminiError);
           if (provider === 'gemini') {
             return res.status(500).json({
-              error: `Gemini API error: ${geminiError?.message || 'Failed to generate content'}. Configure a valid GEMINI_API_KEY in Secrets.`,
+              error: `Gemini API error: ${geminiError?.message || 'Failed to generate content'}. Configure a valid GEMINI_API_KEY in Secrets or .env.`,
               provider: 'Google Gemini (gemini-3.8-flash)',
               fallback: true,
             });
@@ -225,7 +227,58 @@ ${context}`;
         }
       }
 
-      // 2. Try Local Ollama if requested
+      // 2. Try Any OpenAI-Compatible Online AI Provider (OpenAI, Groq, OpenRouter, Together, DeepSeek, etc.)
+      if ((provider === 'custom_openai' || provider === 'auto') && process.env.CUSTOM_AI_API_KEY) {
+        try {
+          const baseUrl = (process.env.CUSTOM_AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+          const modelName = process.env.CUSTOM_AI_MODEL || 'gpt-4o-mini';
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          const apiRes = await fetch(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.CUSTOM_AI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: modelName,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: query },
+              ],
+              temperature: 0.1,
+            }),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+
+          if (apiRes.ok) {
+            const data = await apiRes.json();
+            const answer = data?.choices?.[0]?.message?.content;
+            if (answer) {
+              return res.json({
+                answer,
+                provider: `Online AI (${modelName})`,
+                source: 'cloud_llm',
+              });
+            }
+          } else {
+            throw new Error(`Provider returned HTTP ${apiRes.status}`);
+          }
+        } catch (customErr: any) {
+          console.warn('Custom OpenAI-compatible API fallback:', customErr?.message);
+          if (provider === 'custom_openai') {
+            return res.status(500).json({
+              error: `Online AI API error: ${customErr?.message || 'Request failed'}. Check CUSTOM_AI_API_KEY, CUSTOM_AI_BASE_URL, and CUSTOM_AI_MODEL in .env.`,
+              provider: `Online AI (${process.env.CUSTOM_AI_MODEL || 'OpenAI-Compatible'})`,
+              fallback: true,
+            });
+          }
+        }
+      }
+
+      // 3. Try Local Ollama if requested
       if (provider === 'ollama') {
         try {
           const controller = new AbortController();
@@ -263,7 +316,7 @@ ${context}`;
         }
       }
 
-      // 3. Deterministic Grounded Engine Fallback (Instant, Zero Egress Cost)
+      // 4. Deterministic Grounded Engine Fallback (Instant, Zero Egress Cost)
       return res.json({
         answer: null, // Signals frontend to use deterministic grounding engine
         provider: 'Deterministic Grounding Engine',

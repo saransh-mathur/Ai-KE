@@ -9,6 +9,18 @@
     <meta property="og:description" content="Production architecture workbench and hybrid retrieval simulator combining PostgreSQL relational metadata, pgvector semantic search, and multi-hop knowledge graph reasoning." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('eke-theme-preference');
+          var theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+          document.documentElement.classList.add(theme);
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

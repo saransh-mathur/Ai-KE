@@ -19,7 +19,7 @@ const LAYERS: LayerDetail[] = [
     id: 'layer-1',
     name: '1. Relational & Metadata Layer',
     badge: 'PostgreSQL 16 Master Data',
-    color: 'from-blue-500/20 to-sky-500/10 border-blue-500/30 text-blue-400',
+    color: 'text-blue-600 dark:text-blue-400',
     icon: Database,
     role: 'Enforces relational integrity, business taxonomy, contract tiers, and deterministic metadata filters.',
     responsibilities: [
@@ -46,7 +46,7 @@ CREATE INDEX idx_vendors_metadata_gin ON vendors USING gin (metadata jsonb_path_
     id: 'layer-2',
     name: '2. Vector & Semantic Retrieval Layer',
     badge: 'pgvector + nomic-embed-text',
-    color: 'from-emerald-500/20 to-teal-500/10 border-emerald-500/30 text-emerald-400',
+    color: 'text-emerald-600 dark:text-emerald-400',
     icon: Binary,
     role: 'Performs dense vector similarity matching on unstructured documentation, incident reports, and architecture runbooks.',
     responsibilities: [
@@ -74,7 +74,7 @@ WITH (m = 16, ef_construction = 64);`,
     id: 'layer-3',
     name: '3. Graph & Relationship Layer',
     badge: 'Multi-Hop Structural Reasoning',
-    color: 'from-purple-500/20 to-fuchsia-500/10 border-purple-500/30 text-purple-400',
+    color: 'text-purple-600 dark:text-purple-400',
     icon: GitFork,
     role: 'Captures entity dependency paths that pure vector search cannot correlate across disjoint documents.',
     responsibilities: [
@@ -105,7 +105,7 @@ WITH (m = 16, ef_construction = 64);`,
     id: 'layer-4',
     name: '4. Agentic Orchestration Layer',
     badge: 'FastAPI + RRF + Grounded LLM',
-    color: 'from-amber-500/20 to-orange-500/10 border-amber-500/30 text-amber-400',
+    color: 'text-amber-600 dark:text-amber-400',
     icon: Bot,
     role: 'Parses natural language, orchestrates parallel retrieval, applies Reciprocal Rank Fusion, and grounds LLM prompts.',
     responsibilities: [
@@ -136,17 +136,17 @@ export const ArchitectureDiagram: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Overview Banner */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-sm dark:shadow-none">
         <div className="absolute -right-10 -bottom-10 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="max-w-3xl">
-          <div className="flex items-center gap-2 text-indigo-400 text-xs font-mono uppercase tracking-wider mb-2">
+          <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 text-xs font-mono uppercase tracking-wider mb-2">
             <Zap className="w-4 h-4" />
             End-to-End Enterprise Data Flow Architecture
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             Hybrid Retrieval &amp; Semantic Grounding Pipeline
           </h2>
-          <p className="text-sm text-slate-300 mt-2 leading-relaxed">
+          <p className="text-sm text-slate-700 dark:text-slate-300 mt-2 leading-relaxed">
             Pure vector search fails on relational boundaries and complex multi-hop IT dependencies.
             Our architecture couples PostgreSQL relational master data, pgvector HNSW dense retrieval,
             and graph topological traversal into a single unified SQL query with Reciprocal Rank Fusion (RRF).
@@ -164,18 +164,18 @@ export const ArchitectureDiagram: React.FC = () => {
                 onClick={() => setSelectedLayer(layer.id)}
                 className={`text-left p-4 rounded-xl border transition-all relative ${
                   isSelected
-                    ? 'bg-slate-800/90 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
-                    : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
+                    ? 'bg-indigo-50/70 dark:bg-slate-800/90 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
+                    : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-100/70 dark:hover:bg-slate-900/40'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className={`p-2 rounded-lg bg-slate-900 border border-slate-800 ${layer.color.split(' ')[3]}`}>
+                  <div className={`p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 ${layer.color}`}>
                     <Icon className="w-5 h-5" />
                   </div>
-                  <span className="text-[11px] font-mono text-slate-500">Step {idx + 1}</span>
+                  <span className="text-[11px] font-mono text-slate-600 dark:text-slate-500">Step {idx + 1}</span>
                 </div>
-                <h3 className="text-sm font-semibold text-white mb-1">{layer.name.replace(/^\d+\.\s*/, '')}</h3>
-                <span className="text-[11px] text-slate-400 block truncate">{layer.badge}</span>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white mb-1">{layer.name.replace(/^\d+\.\s*/, '')}</h3>
+                <span className="text-[11px] text-slate-600 dark:text-slate-400 block truncate">{layer.badge}</span>
                 {isSelected && (
                   <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-indigo-500 rounded-full" />
                 )}
@@ -186,33 +186,33 @@ export const ArchitectureDiagram: React.FC = () => {
       </div>
 
       {/* Layer Detail Deep Dive */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
-        <div className="flex flex-col lg:flex-row gap-6">
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-none">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Responsibilities & Tech Stack */}
-          <div className="flex-1 space-y-5">
+          <div className="min-w-0 space-y-5">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-indigo-400">
+              <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-slate-800 border border-indigo-200 dark:border-slate-700 text-indigo-700 dark:text-indigo-400 shrink-0">
                 <activeLayer.icon className="w-6 h-6" />
               </div>
-              <div>
-                <span className="text-xs font-mono text-indigo-400 uppercase tracking-wider">{activeLayer.badge}</span>
-                <h3 className="text-xl font-bold text-white">{activeLayer.name}</h3>
+              <div className="min-w-0">
+                <span className="text-xs font-mono text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">{activeLayer.badge}</span>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">{activeLayer.name}</h3>
               </div>
             </div>
 
-            <p className="text-sm text-slate-300 leading-relaxed bg-slate-950/40 p-4 rounded-xl border border-slate-800/60">
+            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800/60">
               {activeLayer.role}
             </p>
 
             <div>
-              <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <h4 className="text-xs font-mono uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-3 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 Core Architectural Responsibilities
               </h4>
               <ul className="space-y-2">
                 {activeLayer.responsibilities.map((r, i) => (
-                  <li key={i} className="text-xs text-slate-300 flex items-start gap-2.5">
-                    <ChevronRight className="w-3.5 h-3.5 text-indigo-400 mt-0.5 shrink-0" />
+                  <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2.5">
+                    <ChevronRight className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0" />
                     <span>{r}</span>
                   </li>
                 ))}
@@ -221,12 +221,12 @@ export const ArchitectureDiagram: React.FC = () => {
 
             {/* Tech Stack Tags */}
             <div>
-              <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Technologies &amp; Formats</h4>
+              <h4 className="text-xs font-mono uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-2">Technologies &amp; Formats</h4>
               <div className="flex flex-wrap gap-2">
                 {activeLayer.techStack.map((tech, i) => (
                   <span
                     key={i}
-                    className="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700/80 text-slate-200"
+                    className="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-800 dark:text-slate-200"
                   >
                     {tech}
                   </span>
@@ -236,25 +236,25 @@ export const ArchitectureDiagram: React.FC = () => {
           </div>
 
           {/* Right: Key Trade-offs & Code Preview */}
-          <div className="flex-1 space-y-4">
-            <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-sky-400" />
+          <div className="min-w-0 space-y-4">
+            <h4 className="text-xs font-mono uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
               Enterprise Trade-off Analysis
             </h4>
 
             <div className="space-y-3">
               {activeLayer.keyTradeOffs.map((to, i) => (
-                <div key={i} className="p-4 rounded-xl bg-slate-950/70 border border-slate-800">
-                  <h5 className="text-xs font-semibold text-indigo-300 mb-1">{to.title}</h5>
-                  <p className="text-xs text-slate-400 leading-relaxed">{to.desc}</p>
+                <div key={i} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800">
+                  <h5 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1">{to.title}</h5>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{to.desc}</p>
                 </div>
               ))}
             </div>
 
             {/* Code preview snippet */}
             <div>
-              <span className="text-[11px] font-mono text-slate-400 block mb-1.5">PostgreSQL / Python Implementation Preview</span>
-              <pre className="text-xs font-mono p-4 rounded-xl bg-slate-950 border border-slate-800/80 text-slate-300 overflow-x-auto leading-relaxed">
+              <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400 block mb-1.5">PostgreSQL / Python Implementation Preview</span>
+              <pre className="text-xs font-mono p-4 rounded-xl bg-slate-900 dark:bg-slate-950 border border-slate-800 text-slate-100 dark:text-slate-300 overflow-x-auto leading-relaxed">
                 <code>{activeLayer.codeSnippetPreview}</code>
               </pre>
             </div>
@@ -263,15 +263,15 @@ export const ArchitectureDiagram: React.FC = () => {
       </div>
 
       {/* Query Flow Summary Step */}
-      <div className="p-5 rounded-2xl bg-indigo-950/20 border border-indigo-900/40 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="p-5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Activity className="w-5 h-5 text-indigo-400 shrink-0" />
-          <div className="text-xs text-slate-300">
-            <strong className="text-white">Query Lifecycle:</strong> User Question &rarr; Intent Router (SQL Predicate Extraction) &rarr; pgvector HNSW Top-25 &rarr; CTE Graph Hop Traversal &rarr; RRF Ranking (k=60) &rarr; Grounded Context Synthesis.
+          <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <div className="text-xs text-slate-700 dark:text-slate-300">
+            <strong className="text-slate-900 dark:text-white">Query Lifecycle:</strong> User Question &rarr; Intent Router (SQL Predicate Extraction) &rarr; pgvector HNSW Top-25 &rarr; CTE Graph Hop Traversal &rarr; RRF Ranking (k=60) &rarr; Grounded Context Synthesis.
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-mono text-emerald-400 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+          <span className="text-xs font-mono text-emerald-700 dark:text-emerald-400 px-3 py-1 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-full font-medium">
             p95 Latency: &lt; 85ms
           </span>
         </div>

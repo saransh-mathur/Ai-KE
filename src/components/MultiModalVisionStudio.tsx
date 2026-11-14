@@ -84,25 +84,25 @@ export const MultiModalVisionStudio: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm dark:shadow-none">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-indigo-400 text-xs font-mono uppercase tracking-wider mb-1">
+            <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 text-xs font-mono uppercase tracking-wider mb-1">
               <Sparkles className="w-4 h-4" />
               Multi-Modal Document &amp; Vision Ingestion
             </div>
-            <h2 className="text-xl font-bold text-white tracking-tight">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               Architecture Diagram Vision Parser
             </h2>
-            <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl">
               Natively parses visual architecture diagrams (PNG, JPEG, PDF, Lucidchart exports) using Vision-Language Models.
               Extracts infrastructure components, vendors, and network flows directly into queryable graph nodes and relational schemas.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 text-xs font-medium cursor-pointer transition-colors shadow-sm">
-              <Upload className="w-3.5 h-3.5 text-indigo-400" />
+            <label className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 text-xs font-medium cursor-pointer transition-colors shadow-sm">
+              <Upload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
               <span>Upload Custom Diagram</span>
               <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
             </label>
@@ -122,19 +122,19 @@ export const MultiModalVisionStudio: React.FC = () => {
                 setCustomFileUploaded(null);
                 handleRunVisionExtraction(preset.id);
               }}
-              className={`p-4 rounded-xl border text-left transition-all relative ${
+              className={`p-4 rounded-xl border text-left transition-all relative shadow-sm dark:shadow-none ${
                 isSelected
-                  ? 'bg-slate-850 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
-                  : 'bg-slate-900/40 border-slate-800 hover:border-slate-700 hover:bg-slate-900/70'
+                  ? 'bg-indigo-50/60 dark:bg-slate-800/90 border-indigo-500 shadow-md ring-1 ring-indigo-500/30'
+                  : 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/70'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-white">{preset.title}</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                <span className="text-xs font-bold text-slate-900 dark:text-white">{preset.title}</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                   {preset.provider}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 leading-relaxed">{preset.description}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{preset.description}</p>
             </button>
           );
         })}
@@ -143,20 +143,20 @@ export const MultiModalVisionStudio: React.FC = () => {
       {/* Main Split-Screen Workspace: Visual Diagram vs Extracted Graph Schema */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column (5 Cols): Visual Diagram Canvas */}
-        <div className="lg:col-span-5 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex flex-col justify-between shadow-sm dark:shadow-none">
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
-                <FileImage className="w-4 h-4 text-sky-400" />
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 mb-4">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                <FileImage className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                 <span>Visual Diagram Source</span>
               </div>
-              <span className="text-[11px] font-mono text-slate-500 uppercase">
+              <span className="text-[11px] font-mono text-slate-600 dark:text-slate-500 uppercase">
                 {customFileUploaded ? 'Custom Upload' : selectedPreset}
               </span>
             </div>
 
             {/* Rendered Diagram Visual Mockup */}
-            <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 min-h-[320px] flex flex-col justify-center items-center relative overflow-hidden">
+            <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-xl p-4 min-h-[320px] flex flex-col justify-center items-center relative overflow-hidden">
               {customFileUploaded ? (
                 <img
                   src={customFileUploaded}
@@ -166,59 +166,59 @@ export const MultiModalVisionStudio: React.FC = () => {
               ) : selectedPreset === 'aws_multi_az_payment' ? (
                 <div className="w-full space-y-4 text-center">
                   {/* Visual Node: NLB */}
-                  <div className="bg-slate-900 border border-sky-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto shadow-sm">
-                    <span className="text-[10px] font-mono text-sky-400 uppercase block">Ingress Proxy</span>
-                    <strong className="text-xs text-white">Payment NLB / API Gateway</strong>
+                  <div className="bg-white dark:bg-slate-900 border border-sky-300 dark:border-sky-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto shadow-sm">
+                    <span className="text-[10px] font-mono text-sky-700 dark:text-sky-400 uppercase block font-semibold">Ingress Proxy</span>
+                    <strong className="text-xs text-slate-900 dark:text-white">Payment NLB / API Gateway</strong>
                   </div>
 
-                  <div className="text-slate-500 text-xs font-mono">&darr; mTLS HTTPS &darr;</div>
+                  <div className="text-slate-600 dark:text-slate-500 text-xs font-mono">&darr; mTLS HTTPS &darr;</div>
 
                   {/* Multi-AZ Nodes */}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-900 border border-indigo-500/40 rounded-lg p-2.5 shadow-sm">
-                      <span className="text-[10px] font-mono text-indigo-400 uppercase block">us-east-1a (Primary)</span>
-                      <strong className="text-xs text-white">Aurora PG Primary</strong>
-                      <span className="text-[10px] text-emerald-400 block mt-1">&bull; Active RW</span>
+                    <div className="bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-500/40 rounded-lg p-2.5 shadow-sm">
+                      <span className="text-[10px] font-mono text-indigo-700 dark:text-indigo-400 uppercase block font-semibold">us-east-1a (Primary)</span>
+                      <strong className="text-xs text-slate-900 dark:text-white">Aurora PG Primary</strong>
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block mt-1 font-medium">&bull; Active RW</span>
                     </div>
 
-                    <div className="bg-slate-900 border border-indigo-500/40 rounded-lg p-2.5 shadow-sm">
-                      <span className="text-[10px] font-mono text-indigo-400 uppercase block">us-east-1b (Standby)</span>
-                      <strong className="text-xs text-white">Aurora Read Replica</strong>
-                      <span className="text-[10px] text-sky-400 block mt-1">&bull; Async WAL</span>
+                    <div className="bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-500/40 rounded-lg p-2.5 shadow-sm">
+                      <span className="text-[10px] font-mono text-indigo-700 dark:text-indigo-400 uppercase block font-semibold">us-east-1b (Standby)</span>
+                      <strong className="text-xs text-slate-900 dark:text-white">Aurora Read Replica</strong>
+                      <span className="text-[10px] text-sky-700 dark:text-sky-400 block mt-1 font-medium">&bull; Async WAL</span>
                     </div>
                   </div>
 
-                  <div className="text-slate-500 text-xs font-mono">&darr; NVMe-oF &darr;</div>
+                  <div className="text-slate-600 dark:text-slate-500 text-xs font-mono">&darr; NVMe-oF &darr;</div>
 
                   {/* Pure Storage Cache */}
-                  <div className="bg-slate-900 border border-amber-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto shadow-sm">
-                    <span className="text-[10px] font-mono text-amber-400 uppercase block">Low-Latency Cache</span>
-                    <strong className="text-xs text-white">Pure FlashBlade SAN</strong>
+                  <div className="bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto shadow-sm">
+                    <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 uppercase block font-semibold">Low-Latency Cache</span>
+                    <strong className="text-xs text-slate-900 dark:text-white">Pure FlashBlade SAN</strong>
                   </div>
                 </div>
               ) : (
                 <div className="w-full space-y-4 text-center">
-                  <div className="bg-slate-900 border border-purple-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto">
-                    <span className="text-[10px] font-mono text-purple-400 uppercase block">us-west-2</span>
-                    <strong className="text-xs text-white">Cisco Nexus 9336C Spine</strong>
+                  <div className="bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto shadow-sm">
+                    <span className="text-[10px] font-mono text-purple-700 dark:text-purple-400 uppercase block font-semibold">us-west-2</span>
+                    <strong className="text-xs text-slate-900 dark:text-white">Cisco Nexus 9336C Spine</strong>
                   </div>
-                  <div className="text-slate-500 text-xs font-mono">&harr; Transatlantic IPsec &harr;</div>
-                  <div className="bg-slate-900 border border-blue-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto">
-                    <span className="text-[10px] font-mono text-blue-400 uppercase block">europe-west1</span>
-                    <strong className="text-xs text-white">SRV-Alpha (CloudScale EU)</strong>
+                  <div className="text-slate-600 dark:text-slate-500 text-xs font-mono">&harr; Transatlantic IPsec &harr;</div>
+                  <div className="bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto shadow-sm">
+                    <span className="text-[10px] font-mono text-blue-700 dark:text-blue-400 uppercase block font-semibold">europe-west1</span>
+                    <strong className="text-xs text-slate-900 dark:text-white">SRV-Alpha (CloudScale EU)</strong>
                   </div>
-                  <div className="text-slate-500 text-xs font-mono">&darr; Kafka Snowpipe &darr;</div>
-                  <div className="bg-slate-900 border border-sky-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto">
-                    <span className="text-[10px] font-mono text-sky-400 uppercase block">us-east-1</span>
-                    <strong className="text-xs text-white">Snowflake Analytics Core</strong>
+                  <div className="text-slate-600 dark:text-slate-500 text-xs font-mono">&darr; Kafka Snowpipe &darr;</div>
+                  <div className="bg-white dark:bg-slate-900 border border-sky-300 dark:border-sky-500/40 rounded-lg p-2.5 max-w-[220px] mx-auto shadow-sm">
+                    <span className="text-[10px] font-mono text-sky-700 dark:text-sky-400 uppercase block font-semibold">us-east-1</span>
+                    <strong className="text-xs text-slate-900 dark:text-white">Snowflake Analytics Core</strong>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
-            <span className="text-xs text-slate-400">Gemini 3.8 Flash Vision Enabled</span>
+          <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <span className="text-xs text-slate-600 dark:text-slate-400">Gemini 3.8 Flash Vision Enabled</span>
             <button
               onClick={() => handleRunVisionExtraction()}
               disabled={isAnalyzing}
@@ -240,14 +240,14 @@ export const MultiModalVisionStudio: React.FC = () => {
         </div>
 
         {/* Right Column (7 Cols): Extracted Graph & Topological Relations */}
-        <div className="lg:col-span-7 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm dark:shadow-none">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                <GitFork className="w-4 h-4 text-purple-400" />
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-900 dark:text-white">
+                <GitFork className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 <span>Extracted Graph Topology &amp; Queryable Entities</span>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
                 Visual boxes and arrows automatically converted into PostgreSQL relational rows and vector chunks.
               </p>
             </div>
@@ -257,13 +257,13 @@ export const MultiModalVisionStudio: React.FC = () => {
                 onClick={() => setIngestedSuccess(true)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
                   ingestedSuccess
-                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
-                    : 'bg-indigo-600/90 hover:bg-indigo-600 text-white border-indigo-500/40'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600/90 dark:hover:bg-indigo-600 text-white border-indigo-500/40'
                 }`}
               >
                 {ingestedSuccess ? (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Ingested into Graph!</span>
                   </>
                 ) : (
@@ -277,12 +277,12 @@ export const MultiModalVisionStudio: React.FC = () => {
           </div>
 
           {!analysisResult ? (
-            <div className="py-16 text-center text-slate-400 space-y-3">
-              <Cpu className="w-8 h-8 text-slate-600 mx-auto" />
+            <div className="py-16 text-center text-slate-600 dark:text-slate-400 space-y-3">
+              <Cpu className="w-8 h-8 text-slate-400 dark:text-slate-600 mx-auto" />
               <p className="text-xs">Click &ldquo;Parse with Vision LLM&rdquo; to extract relational nodes and topological dependencies.</p>
               <button
                 onClick={() => handleRunVisionExtraction()}
-                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold shadow"
+                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow transition-colors"
               >
                 Run Automatic Extraction
               </button>
@@ -291,28 +291,28 @@ export const MultiModalVisionStudio: React.FC = () => {
             <div className="space-y-4">
               {/* Extracted Nodes List */}
               <div>
-                <span className="text-xs font-mono uppercase tracking-wider text-slate-400 block mb-2">
+                <span className="text-xs font-mono uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
                   1. Discovered Infrastructure Nodes ({analysisResult.nodes.length})
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {analysisResult.nodes.map((node: ExtractedGraphNode) => (
                     <div
                       key={node.id}
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs space-y-1 hover:border-slate-700 transition-colors"
+                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs space-y-1 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
                     >
                       <div className="flex items-center justify-between">
-                        <strong className="text-white truncate font-medium">{node.name}</strong>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-indigo-300">
+                        <strong className="text-slate-900 dark:text-white truncate font-medium">{node.name}</strong>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-transparent">
                           {node.type}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 font-mono">
                         <span>{node.vendor}</span>
                         <span className="text-slate-500">{node.region}</span>
                       </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-900 text-[10px]">
-                        <span className="text-amber-400">{node.criticality}</span>
-                        <span className="text-purple-400 font-mono">{node.securityClearance}</span>
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-900 text-[10px]">
+                        <span className="text-amber-700 dark:text-amber-400 font-medium">{node.criticality}</span>
+                        <span className="text-purple-700 dark:text-purple-400 font-mono font-semibold">{node.securityClearance}</span>
                       </div>
                     </div>
                   ))}
@@ -321,19 +321,19 @@ export const MultiModalVisionStudio: React.FC = () => {
 
               {/* Extracted Edges / Network Flows */}
               <div>
-                <span className="text-xs font-mono uppercase tracking-wider text-slate-400 block mb-2">
+                <span className="text-xs font-mono uppercase tracking-wider text-slate-600 dark:text-slate-400 block mb-2">
                   2. Inferred Directed Graph Edges ({analysisResult.edges.length})
                 </span>
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2 text-xs font-mono">
+                <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 space-y-2 text-xs font-mono">
                   {analysisResult.edges.map((edge: ExtractedGraphEdge, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2 text-slate-300 text-[11px]">
-                      <span className="text-sky-300">{edge.source}</span>
-                      <ArrowRight className="w-3 h-3 text-purple-400" />
-                      <span className="text-purple-400 font-semibold">{edge.relationship}</span>
-                      <ArrowRight className="w-3 h-3 text-purple-400" />
-                      <span className="text-indigo-300">{edge.target}</span>
+                    <div key={idx} className="flex items-center gap-2 text-slate-700 dark:text-slate-300 text-[11px]">
+                      <span className="text-sky-700 dark:text-sky-300 font-medium">{edge.source}</span>
+                      <ArrowRight className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="text-purple-700 dark:text-purple-400 font-semibold">{edge.relationship}</span>
+                      <ArrowRight className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                      <span className="text-indigo-700 dark:text-indigo-300 font-medium">{edge.target}</span>
                       {edge.protocol && (
-                        <span className="text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded ml-auto">
+                        <span className="text-[10px] text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-1.5 py-0.5 rounded ml-auto">
                           {edge.protocol}
                         </span>
                       )}
@@ -344,12 +344,12 @@ export const MultiModalVisionStudio: React.FC = () => {
 
               {/* Inferred Single-Point-of-Failure & SLA Risks */}
               {analysisResult.extractedSlaRisks?.length > 0 && (
-                <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3.5 space-y-1.5">
-                  <div className="flex items-center gap-2 text-amber-400 text-xs font-semibold">
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-500/30 rounded-xl p-3.5 space-y-1.5">
+                  <div className="flex items-center gap-2 text-amber-800 dark:text-amber-400 text-xs font-semibold">
                     <AlertTriangle className="w-4 h-4" />
                     <span>Vision-Inferred SLA Risks &amp; Topology Bottlenecks</span>
                   </div>
-                  <ul className="text-xs text-amber-200/90 space-y-1 list-disc list-inside">
+                  <ul className="text-xs text-amber-900 dark:text-amber-200/90 space-y-1 list-disc list-inside">
                     {analysisResult.extractedSlaRisks.map((risk: string, idx: number) => (
                       <li key={idx}>{risk}</li>
                     ))}

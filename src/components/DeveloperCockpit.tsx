@@ -101,7 +101,7 @@ export const DeveloperCockpit: React.FC<DeveloperCockpitProps> = ({ onNavigateTo
   const [savedToDb, setSavedToDb] = useState<boolean>(false);
 
   // AI Engine & Provider State
-  const [aiProvider, setAiProvider] = useState<'auto' | 'gemini' | 'ollama' | 'deterministic'>('auto');
+  const [aiProvider, setAiProvider] = useState<'auto' | 'gemini' | 'custom_openai' | 'ollama' | 'deterministic'>('auto');
   const [ollamaHost, setOllamaHost] = useState<string>('http://localhost:11434');
   const [ollamaModel, setOllamaModel] = useState<string>('llama3');
   const [aiAnswerText, setAiAnswerText] = useState<string | null>(null);
@@ -297,29 +297,29 @@ ${r.chunk.chunk_text}`).join('\n\n');
       <section className="space-y-4">
         {/* Clean Hero Header */}
         <div className="space-y-1">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
             What would you like to know about your IT assets &amp; vendors?
           </h2>
-          <p className="text-sm sm:text-base text-slate-400">
+          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
             Ask natural language questions across hardware specs, contracts, SLAs, and incident post-mortems.
           </p>
         </div>
 
         {/* Input Box Card */}
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-md shadow-slate-200/60 dark:shadow-xl space-y-4">
           <div className="relative">
             <textarea
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
               rows={3}
               placeholder="e.g. Which Tier-1 database servers in us-east-1 had replication lag incidents?"
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl p-4 text-base text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 leading-relaxed resize-none transition-all shadow-inner"
+              className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-800 rounded-xl p-4 text-base text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 leading-relaxed resize-none transition-all shadow-inner"
             />
           </div>
 
           {/* Quick Prompt Suggestions */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-400 font-medium">Suggestions:</span>
+            <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Suggestions:</span>
             {QUICK_PROMPTS.map((p, idx) => (
               <button
                 key={idx}
@@ -329,7 +329,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
                   setSelectedRegion(p.region);
                   setSelectedTier(p.tier);
                 }}
-                className="text-xs px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-slate-700/60 hover:text-white transition-all text-left"
+                className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:text-indigo-700 dark:hover:text-white hover:border-indigo-200 dark:hover:border-slate-600 transition-all text-left"
               >
                 {p.label}
               </button>
@@ -337,25 +337,25 @@ ${r.chunk.chunk_text}`).join('\n\n');
           </div>
 
           {/* Controls Bar: Advanced Filters, RBAC Switcher, and Search Button */}
-          <div className="pt-2 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-300 hover:text-white px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-750 transition-colors"
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
               >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                 <span>Filters</span>
                 {hasActiveFilters && (
-                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400" />
                 )}
                 {showFilters ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
               </button>
 
               {/* RBAC Security Clearance Selector */}
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-                <span className="text-[10px] text-slate-400 font-mono px-1 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-indigo-400" /> Clearance:
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+                <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono px-1 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> Clearance:
                 </span>
                 <button
                   type="button"
@@ -363,7 +363,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
                   className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
                     securityClearance === 'L1_PUBLIC'
                       ? 'bg-indigo-600 text-white font-bold shadow-sm'
-                      : 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                   title="Level 1: Public Staff (Redacts confidential contracts & SEV-1 root cause postmortems)"
                 >
@@ -375,7 +375,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
                   className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
                     securityClearance === 'L2_CONFIDENTIAL'
                       ? 'bg-indigo-600 text-white font-bold shadow-sm'
-                      : 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                   title="Level 2: Operations SRE (Access to standard runbooks and SEV-2 tickets)"
                 >
@@ -387,7 +387,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
                   className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
                     securityClearance === 'L3_RESTRICTED'
                       ? 'bg-indigo-600 text-white font-bold shadow-sm'
-                      : 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                   title="Level 3: Security Admin / CISO (Unrestricted access to all incidents and executive contracts)"
                 >
@@ -399,10 +399,10 @@ ${r.chunk.chunk_text}`).join('\n\n');
                 <button
                   type="button"
                   onClick={onNavigateToWebhooks}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-750 text-slate-300 hover:text-white text-xs font-medium transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-medium transition-colors"
                   title="Open Real-Time Webhook Pipeline Hub"
                 >
-                  <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
+                  <Radio className="w-3 h-3 text-emerald-600 dark:text-emerald-400 animate-pulse" />
                   <span>Live Webhooks</span>
                 </button>
               )}
@@ -412,7 +412,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
               type="button"
               onClick={handleRunSearch}
               disabled={isSearching}
-              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50 shrink-0"
+              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50 shrink-0"
             >
               <Sparkles className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
               <span>{isSearching ? 'Synthesizing...' : 'Run Intelligent Search'}</span>
@@ -421,13 +421,13 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
           {/* Collapsible Advanced Filters Drawer */}
           {showFilters && (
-            <div className="pt-4 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div className="space-y-1.5">
-                <label className="text-slate-300 font-medium block">Target Region</label>
+                <label className="text-slate-700 dark:text-slate-300 font-medium block">Target Region</label>
                 <select
                   value={selectedRegion}
                   onChange={(e) => setSelectedRegion(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 >
                   <option value="all">All Regions (Unfiltered)</option>
                   <option value="us-east-1">us-east-1 (N. Virginia)</option>
@@ -437,11 +437,11 @@ ${r.chunk.chunk_text}`).join('\n\n');
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-300 font-medium block">Vendor Tier</label>
+                <label className="text-slate-700 dark:text-slate-300 font-medium block">Vendor Tier</label>
                 <select
                   value={selectedTier}
                   onChange={(e) => setSelectedTier(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 >
                   <option value="all">All Tiers (1, 2, 3)</option>
                   <option value="1">Tier 1 (Mission-Critical / Core)</option>
@@ -451,11 +451,11 @@ ${r.chunk.chunk_text}`).join('\n\n');
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-slate-300 font-medium block">Retrieval Engine</label>
+                <label className="text-slate-700 dark:text-slate-300 font-medium block">Retrieval Engine</label>
                 <select
                   value={retrievalMode}
                   onChange={(e) => setRetrievalMode(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 >
                   <option value="hybrid">Hybrid RRF (SQL + Graph + Vector)</option>
                   <option value="vector_only">Vector Only (Disable Graph)</option>
@@ -464,14 +464,15 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
               {/* AI Generation Provider Selection */}
               <div className="space-y-1.5 sm:col-span-2">
-                <label className="text-slate-300 font-medium block">AI Synthesis Model (LLM Provider)</label>
+                <label className="text-slate-700 dark:text-slate-300 font-medium block">AI Synthesis Model (LLM Provider)</label>
                 <select
                   value={aiProvider}
                   onChange={(e) => setAiProvider(e.target.value as any)}
-                  className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                 >
-                  <option value="auto">Auto (Google Gemini API with fallback)</option>
-                  <option value="gemini">Google Gemini API (gemini-2.5-flash Cloud)</option>
+                  <option value="auto">Auto (Configured Cloud API with Deterministic fallback)</option>
+                  <option value="gemini">Google Gemini API (gemini-3.8-flash Cloud)</option>
+                  <option value="custom_openai">Any Online AI API (OpenAI / Groq / OpenRouter via .env)</option>
                   <option value="ollama">Local Ollama LLM (llama3 / mistral on localhost:11434)</option>
                   <option value="deterministic">Deterministic Engine (Local Rules, Zero Latency)</option>
                 </select>
@@ -479,21 +480,21 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
               {aiProvider === 'ollama' && (
                 <div className="space-y-1.5">
-                  <label className="text-slate-300 font-medium block">Ollama Host &amp; Model</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-medium block">Ollama Host &amp; Model</label>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={ollamaHost}
                       onChange={(e) => setOllamaHost(e.target.value)}
                       placeholder="http://localhost:11434"
-                      className="w-2/3 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
+                      className="w-2/3 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white font-mono"
                     />
                     <input
                       type="text"
                       value={ollamaModel}
                       onChange={(e) => setOllamaModel(e.target.value)}
                       placeholder="llama3"
-                      className="w-1/3 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono"
+                      className="w-1/3 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white font-mono"
                     />
                   </div>
                 </div>
@@ -505,14 +506,14 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
       {/* Feedback Toast Notification */}
       {feedbackToast && (
-        <div className="bg-emerald-950/80 border border-emerald-500/50 rounded-xl px-4 py-3 flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-2.5 text-xs text-emerald-200">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-500/50 rounded-xl px-4 py-3 flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{feedbackToast}</span>
           </div>
           <button
             onClick={() => setFeedbackToast(null)}
-            className="text-emerald-400 hover:text-emerald-200 text-xs p-1"
+            className="text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-200 text-xs p-1"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -521,22 +522,22 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
       {/* RBAC Security Clearance Pre-Filtering Redaction Banner */}
       {redactedNotices.length > 0 && (
-        <div className="bg-amber-950/40 border border-amber-600/40 rounded-2xl p-4 sm:p-5 shadow-lg space-y-3">
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-600/40 rounded-2xl p-4 sm:p-5 shadow-md space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+              <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0 mt-0.5">
                 <ShieldAlert className="w-4 h-4" />
               </div>
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="text-sm font-semibold text-amber-200">
+                  <h4 className="text-sm font-semibold text-amber-950 dark:text-amber-200">
                     Vector Space RBAC Pre-Filtering Active ({redactedNotices.length} documents redacted)
                   </h4>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-400/50 dark:border-amber-500/30 font-semibold">
                     Clearance: {securityClearance}
                   </span>
                 </div>
-                <p className="text-xs text-amber-300/80 leading-relaxed font-sans">
+                <p className="text-xs text-amber-900/90 dark:text-amber-300/80 leading-relaxed font-sans">
                   Your security clearance restricted access to {redactedNotices.length} high-similarity documents (such as confidential vendor pricing or SEV-1 incident root cause post-mortems) before candidate generation. These documents were mathematically pruned from vector space to guarantee zero token leakage into the LLM context window.
                 </p>
               </div>
@@ -545,7 +546,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
             <button
               type="button"
               onClick={() => setShowRedactedDetails(!showRedactedDetails)}
-              className="text-xs px-2.5 py-1 rounded-lg bg-amber-900/40 hover:bg-amber-900/70 border border-amber-600/30 text-amber-200 hover:text-white transition-colors shrink-0 flex items-center gap-1"
+              className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/70 border border-amber-300 dark:border-amber-600/30 text-amber-900 dark:text-amber-200 hover:text-amber-950 dark:hover:text-white transition-colors shrink-0 flex items-center gap-1 font-medium"
             >
               <EyeOff className="w-3 h-3" />
               <span>{showRedactedDetails ? 'Hide Pruned Docs' : 'Inspect Pruned Docs'}</span>
@@ -554,29 +555,29 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
           {/* Collapsible Details of Redacted Documents */}
           {showRedactedDetails && (
-            <div className="mt-3 pt-3 border-t border-amber-700/30 space-y-2">
-              <span className="text-[11px] font-mono text-amber-400 block uppercase tracking-wider">
+            <div className="mt-3 pt-3 border-t border-amber-300/70 dark:border-amber-700/30 space-y-2">
+              <span className="text-[11px] font-mono text-amber-800 dark:text-amber-400 block uppercase tracking-wider font-semibold">
                 Pruned Vectors (Pre-Filtered from RRF Candidate Pool):
               </span>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                 {redactedNotices.map((notice, idx) => (
                   <div
                     key={idx}
-                    className="p-3 rounded-xl bg-slate-950/80 border border-amber-900/50 flex flex-col justify-between space-y-1.5"
+                    className="p-3 rounded-xl bg-white dark:bg-slate-950/80 border border-amber-200 dark:border-amber-900/50 flex flex-col justify-between space-y-1.5 shadow-xs"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-slate-200 truncate">{notice.documentTitle}</span>
-                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 shrink-0">
+                      <span className="font-semibold text-slate-900 dark:text-slate-200 truncate">{notice.documentTitle}</span>
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30 shrink-0 font-medium">
                         Requires: {notice.requiredClearance}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                    <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 font-mono">
                       <span>Cosine Similarity: {notice.vectorSimilarity.toFixed(3)}</span>
-                      <span className="text-amber-400 flex items-center gap-1">
+                      <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1 font-semibold">
                         <Lock className="w-3 h-3" /> Redacted
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 italic">
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 italic">
                       {notice.reason}
                     </p>
                   </div>
@@ -590,39 +591,39 @@ ${r.chunk.chunk_text}`).join('\n\n');
       {/* =================================================================== */}
       {/* STEP 2: The Primary Focal Point — Grounded AI Answer Card          */}
       {/* =================================================================== */}
-      <section className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-5">
+      <section className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-lg shadow-slate-200/70 dark:shadow-2xl space-y-5">
         {/* Answer Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800/80">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white tracking-tight">AI Grounded Answer</h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">AI Grounded Answer</h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20 font-medium">
                   {activeModelLabel}
                 </span>
                 {dynamicRrfK !== 60 && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 font-medium">
                     RLHF k={dynamicRrfK}
                   </span>
                 )}
               </div>
-              <span className="text-xs text-slate-400">Grounded via PostgreSQL Master Data &amp; Incident Post-Mortems</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400">Grounded via PostgreSQL Master Data &amp; Incident Post-Mortems</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {/* RLHF Feedback Loop Buttons (Thumbs Up / Thumbs Down) */}
-            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 mr-1">
+            <div className="flex items-center bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 gap-1 mr-1">
               <button
                 type="button"
                 onClick={handleThumbsUp}
                 className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs ${
                   feedbackRating === 'positive'
                     ? 'bg-emerald-600 text-white font-semibold'
-                    : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-850'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-slate-800'
                 }`}
                 title="Accurate Answer: Logs positive reinforcement to RLHF fine-tuning dataset"
               >
@@ -635,7 +636,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
                 className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs ${
                   feedbackRating === 'negative'
                     ? 'bg-rose-600 text-white font-semibold'
-                    : 'text-slate-400 hover:text-rose-400 hover:bg-slate-850'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-800'
                 }`}
                 title="Report Inaccuracy: Opens feedback modal and dynamically re-tunes RRF parameter"
               >
@@ -645,40 +646,40 @@ ${r.chunk.chunk_text}`).join('\n\n');
             </div>
 
             {savedToDb && (
-              <span className="text-xs text-emerald-400 flex items-center gap-1 font-mono">
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-mono font-medium">
                 <Check className="w-3.5 h-3.5" /> Saved
               </span>
             )}
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-medium border border-slate-700/80 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-medium border border-slate-200 dark:border-slate-700/80 transition-colors"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         </div>
 
         {/* Answer Text: Large, High-Readability Typography */}
-        <div className="text-base sm:text-lg text-slate-100 leading-relaxed font-sans whitespace-pre-line">
+        <div className="text-base sm:text-lg text-slate-800 dark:text-slate-100 leading-relaxed font-sans whitespace-pre-line">
           {displayAnswer}
         </div>
 
         {/* Clean Entity Provenance Tags */}
         {topResult && (
-          <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-400 font-medium">Entities:</span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-200">
-              Vendor: <strong className="text-white">{topResult.vendor.name}</strong> (Tier {topResult.vendor.tier})
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-600 dark:text-slate-400 font-medium">Entities:</span>
+            <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+              Vendor: <strong className="text-slate-900 dark:text-white">{topResult.vendor.name}</strong> (Tier {topResult.vendor.tier})
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-200">
-              Asset: <strong className="text-white">{topResult.asset.name}</strong> ({topResult.asset.region})
+            <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+              Asset: <strong className="text-slate-900 dark:text-white">{topResult.asset.name}</strong> ({topResult.asset.region})
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-200">
-              BU: <strong className="text-white">{topResult.businessUnit.name}</strong>
+            <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+              BU: <strong className="text-slate-900 dark:text-white">{topResult.businessUnit.name}</strong>
             </span>
             {topResult.incident && (
-              <span className="px-2.5 py-1 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-300 font-medium">
+              <span className="px-2.5 py-1 rounded-md bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-300 font-medium">
                 Incident: {topResult.incident.severity}
               </span>
             )}
@@ -689,44 +690,46 @@ ${r.chunk.chunk_text}`).join('\n\n');
       {/* =================================================================== */}
       {/* STEP 3: Collapsible "Under the Hood: Retrieval Proof"               */}
       {/* =================================================================== */}
-      <section className="bg-slate-900/40 border border-slate-800/80 rounded-2xl overflow-hidden shadow-lg">
+      <section className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-md dark:shadow-lg">
         {/* Accordion Toggle Bar */}
         <button
           type="button"
           onClick={() => setShowProof(!showProof)}
-          className="w-full p-4 sm:p-5 flex items-center justify-between text-left hover:bg-slate-900/60 transition-colors"
+          className="w-full p-4 sm:p-5 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <span className="w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center text-slate-300 text-xs font-mono">
+            <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-transparent flex items-center justify-center text-slate-700 dark:text-slate-300 text-xs font-mono font-bold">
               {showProof ? '−' : '+'}
             </span>
             <div>
-              <span className="text-sm font-semibold text-white block">
+              <span className="text-sm font-semibold text-slate-900 dark:text-white block">
                 Under the Hood: Retrieval Proof
               </span>
-              <span className="text-xs text-slate-400 block">
+              <span className="text-xs text-slate-600 dark:text-slate-400 block">
                 {results.length} verified sources &bull; Multi-hop graph chain &bull; Single-pass SQL CTE
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20 hidden sm:inline">
+            <span className="text-xs font-mono text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-500/20 hidden sm:inline font-medium">
               RRF: {topResult ? topResult.rrfScore.toFixed(5) : '0.000'}
             </span>
-            {showProof ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            {showProof ? <ChevronUp className="w-4 h-4 text-slate-500 dark:text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-500 dark:text-slate-400" />}
           </div>
         </button>
 
         {/* Collapsible Content */}
         {showProof && (
-          <div className="p-5 sm:p-6 border-t border-slate-800/80 bg-slate-950/60 space-y-5">
+          <div className="p-5 sm:p-6 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-950/60 space-y-5">
             {/* Sub-tabs for under-the-hood inspection */}
-            <div className="flex gap-2 border-b border-slate-800 pb-3 text-xs font-medium">
+            <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 text-xs font-medium">
               <button
                 onClick={() => setProofTab('graph')}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
-                  proofTab === 'graph' ? 'bg-indigo-600 text-white font-semibold' : 'text-slate-400 hover:text-white'
+                  proofTab === 'graph'
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-transparent'
                 }`}
               >
                 Multi-Hop Graph Path
@@ -734,7 +737,9 @@ ${r.chunk.chunk_text}`).join('\n\n');
               <button
                 onClick={() => setProofTab('chunks')}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
-                  proofTab === 'chunks' ? 'bg-indigo-600 text-white font-semibold' : 'text-slate-400 hover:text-white'
+                  proofTab === 'chunks'
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-transparent'
                 }`}
               >
                 Vector Chunks ({results.length})
@@ -742,7 +747,9 @@ ${r.chunk.chunk_text}`).join('\n\n');
               <button
                 onClick={() => setProofTab('sql')}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
-                  proofTab === 'sql' ? 'bg-indigo-600 text-white font-semibold' : 'text-slate-400 hover:text-white'
+                  proofTab === 'sql'
+                    ? 'bg-indigo-600 text-white font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-transparent'
                 }`}
               >
                 SQL CTE Predicates
@@ -752,35 +759,35 @@ ${r.chunk.chunk_text}`).join('\n\n');
             {/* Sub-tab 1: Multi-Hop Graph Path */}
             {proofTab === 'graph' && topResult && (
               <div className="space-y-3">
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-600 dark:text-slate-400">
                   Transitive entity chain connecting master records to live incidents:
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs font-sans">
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] font-mono text-blue-400 uppercase block">1. Vendor</span>
-                    <strong className="text-white block mt-0.5">{topResult.vendor.name}</strong>
-                    <span className="text-slate-400 text-[11px]">Tier {topResult.vendor.tier} &bull; {topResult.vendor.contract_status}</span>
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                    <span className="text-[10px] font-mono text-blue-700 dark:text-blue-400 uppercase block font-semibold">1. Vendor</span>
+                    <strong className="text-slate-900 dark:text-white block mt-0.5">{topResult.vendor.name}</strong>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Tier {topResult.vendor.tier} &bull; {topResult.vendor.contract_status}</span>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] font-mono text-indigo-400 uppercase block">2. Asset (Supplies)</span>
-                    <strong className="text-white block mt-0.5">{topResult.asset.name}</strong>
-                    <span className="text-slate-400 text-[11px]">{topResult.asset.type} &bull; {topResult.asset.region}</span>
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                    <span className="text-[10px] font-mono text-indigo-700 dark:text-indigo-400 uppercase block font-semibold">2. Asset (Supplies)</span>
+                    <strong className="text-slate-900 dark:text-white block mt-0.5">{topResult.asset.name}</strong>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">{topResult.asset.type} &bull; {topResult.asset.region}</span>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] font-mono text-amber-400 uppercase block">3. Business Unit</span>
-                    <strong className="text-white block mt-0.5">{topResult.businessUnit.name}</strong>
-                    <span className="text-slate-400 text-[11px]">{topResult.businessUnit.cost_center}</span>
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                    <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 uppercase block font-semibold">3. Business Unit</span>
+                    <strong className="text-slate-900 dark:text-white block mt-0.5">{topResult.businessUnit.name}</strong>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">{topResult.businessUnit.cost_center}</span>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] font-mono text-rose-400 uppercase block">4. Incident / Post-Mortem</span>
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                    <span className="text-[10px] font-mono text-rose-700 dark:text-rose-400 uppercase block font-semibold">4. Incident / Post-Mortem</span>
                     {topResult.incident ? (
                       <>
-                        <strong className="text-rose-300 block mt-0.5 truncate">{topResult.incident.title}</strong>
-                        <span className="text-slate-400 text-[11px]">{topResult.incident.severity} &bull; {topResult.incident.downtime_minutes}m downtime</span>
+                        <strong className="text-rose-700 dark:text-rose-300 block mt-0.5 truncate">{topResult.incident.title}</strong>
+                        <span className="text-slate-600 dark:text-slate-400 text-[11px]">{topResult.incident.severity} &bull; {topResult.incident.downtime_minutes}m downtime</span>
                       </>
                     ) : (
                       <span className="text-slate-500 italic block mt-1">No active severity incidents</span>
@@ -794,18 +801,18 @@ ${r.chunk.chunk_text}`).join('\n\n');
             {proofTab === 'chunks' && (
               <div className="space-y-3">
                 {results.map((res, i) => (
-                  <div key={i} className="bg-slate-900 border border-slate-800/80 rounded-xl p-4 text-xs space-y-2">
-                    <div className="flex items-center justify-between">
+                  <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-xs space-y-2 shadow-xs">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-emerald-400">ID: {res.chunk.id}</span>
-                        <span className="text-slate-500">&bull;</span>
-                        <span className="font-medium text-white">{res.chunk.document_title}</span>
+                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">ID: {res.chunk.id}</span>
+                        <span className="text-slate-400">&bull;</span>
+                        <span className="font-medium text-slate-900 dark:text-white">{res.chunk.document_title}</span>
                       </div>
-                      <div className="font-mono text-indigo-300">
+                      <div className="font-mono text-indigo-700 dark:text-indigo-300 font-semibold">
                         Similarity: {res.vectorSimilarity.toFixed(3)}
                       </div>
                     </div>
-                    <p className="text-slate-300 text-xs leading-relaxed font-sans">
+                    <p className="text-slate-700 dark:text-slate-300 text-xs leading-relaxed font-sans">
                       {res.chunk.chunk_text}
                     </p>
                   </div>
@@ -815,14 +822,14 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
             {/* Sub-tab 3: SQL CTE Predicates */}
             {proofTab === 'sql' && (
-              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 font-mono text-xs text-slate-300 space-y-2">
-                <span className="text-slate-400 block text-[11px]">Generated Relational SQL Pre-filter:</span>
-                <pre className="text-indigo-300 overflow-x-auto leading-relaxed">
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs">
+                <span className="text-slate-600 dark:text-slate-400 block text-[11px]">Generated Relational SQL Pre-filter:</span>
+                <pre className="bg-slate-900 dark:bg-slate-950 text-indigo-300 p-3 rounded-lg overflow-x-auto leading-relaxed">
 {`WHERE ${selectedTier !== 'all' ? `v.tier = '${selectedTier}'` : 'v.tier IS NOT NULL'}
   AND ${selectedRegion !== 'all' ? `a.region = '${selectedRegion}'` : 'a.region IS NOT NULL'}`}
                 </pre>
-                <span className="text-slate-500 block text-[11px] pt-1">
-                  Executes single-pass CTE in PostgreSQL with HNSW vector search (<code className="text-slate-400">&lt;=&gt;</code>) and RRF fusion.
+                <span className="text-slate-600 dark:text-slate-500 block text-[11px] pt-1">
+                  Executes single-pass CTE in PostgreSQL with HNSW vector search (<code className="text-indigo-700 dark:text-slate-400">&lt;=&gt;</code>) and RRF fusion.
                 </span>
               </div>
             )}
@@ -834,22 +841,22 @@ ${r.chunk.chunk_text}`).join('\n\n');
       {/* RLHF Negative Feedback & Dynamic RRF Tuning Modal                   */}
       {/* =================================================================== */}
       {showFeedbackModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400">
                   <ThumbsDown className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Log Retrieval Inaccuracy</h3>
-                  <p className="text-xs text-slate-400">RLHF training signal &amp; dynamic RRF weight tuning</p>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Log Retrieval Inaccuracy</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">RLHF training signal &amp; dynamic RRF weight tuning</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowFeedbackModal(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white p-1"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -857,11 +864,11 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-300 font-medium block mb-1">Issue Category</label>
+                <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Issue Category</label>
                 <select
                   value={feedbackCategory}
                   onChange={(e) => setFeedbackCategory(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/40"
                 >
                   <option value="Missing Graph Context">Missing Graph Context (Hop disconnected between vendor &amp; asset)</option>
                   <option value="Hallucinated Entity Detail">Hallucinated Entity Detail (Spec or metric not grounded in master data)</option>
@@ -872,7 +879,7 @@ ${r.chunk.chunk_text}`).join('\n\n');
               </div>
 
               <div>
-                <label className="text-slate-300 font-medium block mb-1">
+                <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
                   Correction / Engineer Note (Optional)
                 </label>
                 <textarea
@@ -880,26 +887,26 @@ ${r.chunk.chunk_text}`).join('\n\n');
                   onChange={(e) => setFeedbackNote(e.target.value)}
                   rows={3}
                   placeholder="e.g. Expected SRV-Alpha to link directly to CC-SEC-0010 without relying on secondary incident notes..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 resize-none"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 resize-none"
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-                <div className="flex items-center gap-2 font-mono text-[11px] text-indigo-300">
-                  <Binary className="w-3.5 h-3.5 text-indigo-400" />
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-1">
+                <div className="flex items-center gap-2 font-mono text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold">
+                  <Binary className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                   <span>Dynamic Parameter Adjustment:</span>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Submitting this correction sets the local session RRF constant to <strong className="text-white font-mono">k = 65</strong> (tighter rank curve, punishing low-scoring vector noise) and appends this pair to the PostgreSQL <code className="text-slate-300">feedback_logs</code> table for future retrieval model fine-tuning.
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Submitting this correction sets the local session RRF constant to <strong className="text-slate-900 dark:text-white font-mono">k = 65</strong> (tighter rank curve, punishing low-scoring vector noise) and appends this pair to the PostgreSQL <code className="text-indigo-700 dark:text-slate-300 font-semibold">feedback_logs</code> table for future retrieval model fine-tuning.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setShowFeedbackModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-750 transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 Cancel
               </button>

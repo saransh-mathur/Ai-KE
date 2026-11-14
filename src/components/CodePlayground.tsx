@@ -38,23 +38,23 @@ export const CodePlayground: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header & File Selector */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm dark:shadow-none">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Terminal className="w-5 h-5 text-indigo-400" />
+            <Terminal className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             <div>
-              <h2 className="text-lg font-bold text-white">Production Backend &amp; Data Pipeline Code</h2>
-              <p className="text-xs text-slate-400">Enterprise asynchronous Python (FastAPI / asyncpg) &amp; pgvector SQL CTE</p>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Production Backend &amp; Data Pipeline Code</h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Enterprise asynchronous Python (FastAPI / asyncpg) &amp; pgvector SQL CTE</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Tab switch */}
-            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+            <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
               <button
                 onClick={() => setActiveFile('fastapi')}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
-                  activeFile === 'fastapi' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'
+                  activeFile === 'fastapi' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 FastAPI Service
@@ -62,7 +62,7 @@ export const CodePlayground: React.FC = () => {
               <button
                 onClick={() => setActiveFile('sql')}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
-                  activeFile === 'sql' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'
+                  activeFile === 'sql' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Hybrid SQL CTE
@@ -70,7 +70,7 @@ export const CodePlayground: React.FC = () => {
               <button
                 onClick={() => setActiveFile('orm')}
                 className={`px-3 py-1.5 rounded-lg transition-all ${
-                  activeFile === 'orm' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'
+                  activeFile === 'orm' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 SQLAlchemy 2.0
@@ -79,24 +79,24 @@ export const CodePlayground: React.FC = () => {
 
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-200 border border-slate-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-mono text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-colors"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Copied!' : 'Copy Module'}</span>
             </button>
           </div>
         </div>
 
         {/* Description */}
-        <div className="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-300 flex items-center gap-2">
-          <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800/80 text-xs text-slate-700 dark:text-slate-300 flex items-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
           <span>{current.description}</span>
         </div>
       </div>
 
-      {/* Code Editor Frame */}
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-900/60 text-xs text-slate-400">
+      {/* Code Editor Frame (kept dark syntax surface for crisp code readability in both themes) */}
+      <div className="bg-slate-900 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-2xl overflow-hidden shadow-lg dark:shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-900/90 dark:bg-slate-900/60 text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
@@ -106,7 +106,7 @@ export const CodePlayground: React.FC = () => {
           <span className="font-mono text-indigo-400">{current.language}</span>
         </div>
 
-        <pre className="text-xs font-mono text-slate-300 p-5 overflow-x-auto leading-relaxed max-h-[600px]">
+        <pre className="text-xs font-mono text-slate-100 dark:text-slate-300 p-5 overflow-x-auto leading-relaxed max-h-[600px]">
           <code>{current.code}</code>
         </pre>
       </div>
