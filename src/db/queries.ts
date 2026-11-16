@@ -9,8 +9,9 @@ import {
   savedQueries,
   webhookEvents,
   feedbackLogs,
+  audioTranscripts,
 } from './schema.ts';
-import { eq, desc, count, sql } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 
 /**
  * User Registration & Synchronization helper using upsert to avoid race conditions.
@@ -338,5 +339,80 @@ export async function getFeedbackStats() {
   } catch (error) {
     console.error('Failed to get feedback stats:', error);
     throw new Error('Failed to fetch feedback statistics', { cause: error });
+  }
+}
+
+/**
+ * Persist an audio transcription generated via gemini-3.5-transcribe in Cloud SQL
+ */
+export async function saveAudioTranscript(data: {
+  userId?: number;
+  userEmail?: string;
+  mimeType: string;
+  durationSeconds?: number;
+  transcriptText: string;
+  modelUsed?: string;
+  targetContext?: string;
+}) {
+  try {
+    const [res] = await db
+      .insert(audioTranscripts)
+      .values({
+        userId: data.userId || null,
+        userEmail: data.userEmail || 'guest@enterprise-engine.local',
+        mimeType: data.mimeType,
+        durationSeconds: Math.max(0, Math.floor(data.durationSeconds || 0)),
+        transcriptText: data.transcriptText,
+        modelUsed: data.modelUsed || 'gemini-3.5-transcribe',
+        targetContext: data.targetContext || 'search_query',
+      })
+      .returning();
+    return res;
+  } catch (error) {
+    console.error('Failed to save audio transcript:', error);
+    throw new Error('Failed to persist audio transcript in database', { cause: error });
+  }
+}
+
+/**
+ * Fetch recent audio transcriptions from Cloud SQL
+ */
+export async function getRecentAudioTranscripts(limitCount: number = 20, userId?: number) {
+  try {
+    const baseQuery = db.select().from(audioTranscripts);
+    if (typeof userId === 'number') {
+      return await baseQuery
+        .where(eq(audioTranscripts.userId, userId))
+        .orderBy(desc(audioTranscripts.createdAt))
+        .limit(limitCount);
+    }
+    return await baseQuery
+      .orderBy(desc(audioTranscripts.createdAt))
+      .limit(limitCount);
+  } catch (error) {
+    console.error('Failed to fetch audio transcripts:', error);
+    throw new Error('Failed to fetch audio transcripts from database', { cause: error });
+  }
+}
+
+/**
+ * Delete an audio transcript record by ID
+ */
+export async function deleteAudioTranscript(id: number, userId?: number) {
+  try {
+    const condition =
+      typeof userId === 'number'
+        ? and(eq(audioTranscripts.id, id), eq(audioTranscripts.userId, userId))
+        : eq(audioTranscripts.id, id);
+
+    const deleted = await db
+      .delete(audioTranscripts)
+      .where(condition)
+      .returning();
+
+    return deleted[0] || null;
+  } catch (error) {
+    console.error('Failed to delete audio transcript:', error);
+    throw new Error('Failed to delete audio transcript from database', { cause: error });
   }
 }

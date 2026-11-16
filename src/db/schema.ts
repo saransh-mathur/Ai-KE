@@ -127,9 +127,23 @@ export const feedbackLogs = pgTable('feedback_logs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// 10. Audio Transcripts (Persisted Microphone & Audio Transcriptions via gemini-3.5-transcribe)
+export const audioTranscripts = pgTable('audio_transcripts', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  userEmail: text('user_email').default('guest@enterprise-engine.local').notNull(),
+  mimeType: text('mime_type').notNull(),
+  durationSeconds: integer('duration_seconds').default(0).notNull(),
+  transcriptText: text('transcript_text').notNull(),
+  modelUsed: text('model_used').default('gemini-3.5-transcribe').notNull(),
+  targetContext: text('target_context').default('search_query').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   savedQueries: many(savedQueries),
+  audioTranscripts: many(audioTranscripts),
 }));
 
 export const vendorsRelations = relations(vendors, ({ many }) => ({
@@ -170,6 +184,13 @@ export const knowledgeChunksRelations = relations(knowledgeChunks, ({ one }) => 
 export const savedQueriesRelations = relations(savedQueries, ({ one }) => ({
   user: one(users, {
     fields: [savedQueries.userId],
+    references: [users.id],
+  }),
+}));
+
+export const audioTranscriptsRelations = relations(audioTranscripts, ({ one }) => ({
+  user: one(users, {
+    fields: [audioTranscripts.userId],
     references: [users.id],
   }),
 }));

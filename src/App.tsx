@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header, MainNavTab } from './components/Header.tsx';
 import { ArchitectureDiagram } from './components/ArchitectureDiagram.tsx';
 import { SchemaViewer } from './components/SchemaViewer.tsx';
@@ -10,13 +10,16 @@ import { WebhookIngestionHub } from './components/WebhookIngestionHub.tsx';
 import { MultiModalVisionStudio } from './components/MultiModalVisionStudio.tsx';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
-import { Layers, Database, GitFork, Terminal, Download, Check } from 'lucide-react';
+import { Layers, Database, GitFork, Terminal, Download, Check, CheckCircle2, X } from 'lucide-react';
 import { downloadArchitectureReport, ArchitectureSubTab } from './lib/architecture-reports.ts';
+import { isSaveReportShortcut } from './lib/keyboard-shortcuts.ts';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainNavTab>('simulator');
   const [archSubTab, setArchSubTab] = useState<ArchitectureSubTab>('blueprint');
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+  const [downloadedFilename, setDownloadedFilename] = useState<string | null>(null);
+  const downloadTimeoutRef = useRef<number | null>(null);
 
   // Sync sub-tab if activeTab was selected directly from deep link
   const currentSubTab: ArchitectureSubTab =
@@ -32,13 +35,41 @@ export default function App() {
     }
   };
 
-  const handleDownloadReport = () => {
-    downloadArchitectureReport(currentSubTab);
+  const handleDownloadReport = useCallback(() => {
+    const report = downloadArchitectureReport(currentSubTab);
     setDownloadSuccess(true);
-    setTimeout(() => {
+    setDownloadedFilename(report.targetFilename);
+    if (downloadTimeoutRef.current !== null) {
+      window.clearTimeout(downloadTimeoutRef.current);
+    }
+    downloadTimeoutRef.current = window.setTimeout(() => {
       setDownloadSuccess(false);
-    }, 2500);
-  };
+      setDownloadedFilename(null);
+    }, 3000);
+  }, [currentSubTab]);
+
+  // Global Cmd+S / Ctrl+S keyboard shortcut to trigger Architecture Report download from any tab
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isSaveReportShortcut(event)) {
+        event.preventDefault();
+        handleDownloadReport();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleDownloadReport]);
+
+  useEffect(() => {
+    return () => {
+      if (downloadTimeoutRef.current !== null) {
+        window.clearTimeout(downloadTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <ThemeProvider>
@@ -122,7 +153,7 @@ export default function App() {
                         ? 'bg-emerald-50 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
                         : 'bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white'
                     }`}
-                    title={`Download JSON snapshot report of currently active ${currentSubTab} tab`}
+                    title={`Download JSON snapshot report of currently active ${currentSubTab} tab (Cmd+S / Ctrl+S)`}
                     aria-label="Download Report"
                   >
                     {downloadSuccess ? (
@@ -137,6 +168,9 @@ export default function App() {
                         <span className="text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/90 px-1.5 py-0.5 rounded font-mono uppercase">
                           {currentSubTab}.json
                         </span>
+                        <kbd className="hidden md:inline-block text-[10px] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded px-1 py-0.5 font-mono">
+                          Ctrl+S
+                        </kbd>
                       </>
                     )}
                   </button>
@@ -149,6 +183,34 @@ export default function App() {
               </div>
             )}
           </main>
+
+          {/* Global Download Report Confirmation Toast (visible from any tab on Cmd+S / Ctrl+S) */}
+          {downloadedFilename && (
+            <div
+              id="report-download-toast"
+              role="status"
+              aria-live="polite"
+              className="fixed bottom-5 right-5 z-50 max-w-sm bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-500/50 rounded-xl px-4 py-3 shadow-xl flex items-center gap-3 text-xs animate-in fade-in slide-in-from-bottom-2 duration-200"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-semibold text-slate-900 dark:text-white">
+                  Architecture Report Downloaded
+                </div>
+                <div className="font-mono text-[11px] text-slate-600 dark:text-slate-400 truncate">
+                  {downloadedFilename}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDownloadedFilename(null)}
+                aria-label="Dismiss download notification"
+                className="p-1 rounded-md text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Clean, Subtle Footer */}
           <footer className="border-t border-slate-200 dark:border-slate-900 bg-white/80 dark:bg-slate-950/60 py-6 text-xs text-slate-600 dark:text-slate-500">

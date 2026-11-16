@@ -25,8 +25,10 @@ import {
   MessageSquare,
   AlertCircle,
   HelpCircle,
-  X
+  X,
+  Mic
 } from 'lucide-react';
+import { VoiceTranscriberPanel } from './VoiceTranscriberPanel.tsx';
 import {
   parseNaturalLanguageQuery,
   executeHybridRetrievalWithRbac,
@@ -94,6 +96,7 @@ export const DeveloperCockpit: React.FC<DeveloperCockpitProps> = ({ onNavigateTo
 
   // UI Disclosure State
   const [showFilters, setShowFilters] = useState<boolean>(false);
+  const [showVoiceTranscriber, setShowVoiceTranscriber] = useState<boolean>(false);
   const [showProof, setShowProof] = useState<boolean>(false);
   const [proofTab, setProofTab] = useState<'graph' | 'chunks' | 'sql'>('graph');
   const [isSearching, setIsSearching] = useState<boolean>(false);
@@ -281,6 +284,13 @@ ${r.chunk.chunk_text}`).join('\n\n');
     }, 200);
   };
 
+  const handleApplyTranscript = (transcriptText: string, autoRunSearch: boolean = false) => {
+    setQueryInput(transcriptText);
+    if (autoRunSearch) {
+      handleRunSearch();
+    }
+  };
+
   const handleCopy = () => {
     navigator.clipboard.writeText(displayAnswer);
     setCopied(true);
@@ -350,6 +360,23 @@ ${r.chunk.chunk_text}`).join('\n\n');
                   <span className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400" />
                 )}
                 {showFilters ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
+              </button>
+
+              {/* Voice / Audio Transcribe Toggle Button */}
+              <button
+                id="toggle-voice-transcriber-btn"
+                type="button"
+                onClick={() => setShowVoiceTranscriber(!showVoiceTranscriber)}
+                aria-expanded={showVoiceTranscriber}
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border transition-colors ${
+                  showVoiceTranscriber
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                    : 'bg-slate-100 dark:bg-slate-800/60 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border-slate-200 dark:border-slate-700'
+                }`}
+                title="Transcribe voice via microphone or audio file using gemini-3.5-transcribe"
+              >
+                <Mic className={`w-3.5 h-3.5 ${showVoiceTranscriber ? 'text-white' : 'text-rose-600 dark:text-rose-400'}`} />
+                <span>Voice Transcribe</span>
               </button>
 
               {/* RBAC Security Clearance Selector */}
@@ -500,6 +527,14 @@ ${r.chunk.chunk_text}`).join('\n\n');
                 </div>
               )}
             </div>
+          )}
+
+          {/* Collapsible Voice & Audio Transcription Panel (gemini-3.5-transcribe) */}
+          {showVoiceTranscriber && (
+            <VoiceTranscriberPanel
+              onApplyTranscript={handleApplyTranscript}
+              onClose={() => setShowVoiceTranscriber(false)}
+            />
           )}
         </div>
       </section>

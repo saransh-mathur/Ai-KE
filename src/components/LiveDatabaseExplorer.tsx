@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext.tsx';
 
 export const LiveDatabaseExplorer: React.FC = () => {
   const { user, idToken } = useAuth();
-  const [activeTable, setActiveTable] = useState<'vendors' | 'assets' | 'incidents' | 'chunks' | 'savedQueries'>('vendors');
+  const [activeTable, setActiveTable] = useState<'vendors' | 'assets' | 'incidents' | 'chunks' | 'savedQueries' | 'audioTranscripts'>('vendors');
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
@@ -17,6 +17,7 @@ export const LiveDatabaseExplorer: React.FC = () => {
       if (table === 'incidents') endpoint = '/api/incidents';
       if (table === 'chunks') endpoint = '/api/knowledge-chunks';
       if (table === 'savedQueries') endpoint = '/api/saved-queries';
+      if (table === 'audioTranscripts') endpoint = '/api/transcripts';
 
       const res = await fetch(endpoint);
       if (res.ok) {
@@ -122,6 +123,16 @@ export const LiveDatabaseExplorer: React.FC = () => {
           >
             saved_queries (Audit Trail)
           </button>
+          <button
+            onClick={() => setActiveTable('audioTranscripts')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              activeTable === 'audioTranscripts'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            audio_transcripts (Voice Logs)
+          </button>
         </div>
       </div>
 
@@ -129,7 +140,9 @@ export const LiveDatabaseExplorer: React.FC = () => {
       <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl">
         <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-indigo-700 dark:text-indigo-400 font-semibold">{activeTable}</span>
+            <span className="font-mono text-indigo-700 dark:text-indigo-400 font-semibold">
+              {activeTable === 'savedQueries' ? 'saved_queries' : activeTable === 'audioTranscripts' ? 'audio_transcripts' : activeTable === 'chunks' ? 'knowledge_chunks' : activeTable}
+            </span>
             <span className="text-slate-600 dark:text-slate-500 font-mono">({data.length} records)</span>
           </div>
           <span className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 font-medium">
@@ -145,7 +158,10 @@ export const LiveDatabaseExplorer: React.FC = () => {
           </div>
         ) : data.length === 0 ? (
           <div className="py-12 text-center text-slate-600 dark:text-slate-500 text-xs">
-            No records found in table <code className="text-slate-800 dark:text-slate-400 font-mono">{activeTable}</code>.
+            No records found in table{' '}
+            <code className="text-slate-800 dark:text-slate-400 font-mono">
+              {activeTable === 'savedQueries' ? 'saved_queries' : activeTable === 'audioTranscripts' ? 'audio_transcripts' : activeTable === 'chunks' ? 'knowledge_chunks' : activeTable}
+            </code>.
           </div>
         ) : (
           <div className="overflow-x-auto max-h-[500px]">

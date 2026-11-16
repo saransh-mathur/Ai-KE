@@ -15,7 +15,16 @@ import {
   getRecentWebhookEvents,
   recordFeedbackLog,
   getFeedbackStats,
+  saveAudioTranscript,
+  getRecentAudioTranscripts,
+  deleteAudioTranscript,
 } from './src/db/queries.ts';
+import {
+  getGeminiClient,
+  isGeminiKeyConfigured,
+  formatGeminiErrorMessage,
+} from './src/lib/gemini-client.ts';
+import { validateAudioPayload } from './src/lib/audio-utils.ts';
 
 dotenv.config();
 
@@ -26,7 +35,7 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '25mb' }));
 
   // ---------------------------------------------------------------------------
   // API Routes
@@ -154,8 +163,10 @@ async function startServer() {
   // Check AI Provider availability (Gemini API, Custom Online API, vs Local Ollama)
   app.get('/api/ai-status', (_req, res) => {
     res.json({
-      geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'),
+      geminiConfigured: isGeminiKeyConfigured(),
       geminiModel: 'gemini-3.8-flash',
+      transcribeConfigured: isGeminiKeyConfigured(),
+      transcribeModel: 'gemini-3.5-transcribe',
       customOnlineAiConfigured: Boolean(process.env.CUSTOM_AI_API_KEY),
       customOnlineAiModel: process.env.CUSTOM_AI_MODEL || 'gpt-4o-mini',
       localOllamaSupported: true,
@@ -192,11 +203,10 @@ Context:
 ${context}`;
 
       // 1. Try Google Gemini if requested or auto with API key available
-      if ((provider === 'gemini' || provider === 'auto') && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
+      if ((provider === 'gemini' || provider === 'auto') && isGeminiKeyConfigured()) {
         try {
-          const { GoogleGenAI } = await import('@google/genai');
-          const ai = new GoogleGenAI({});
-          
+          const ai = getGeminiClient();
+
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Gemini API call timed out after 5000ms')), 5000)
           );
@@ -516,10 +526,9 @@ ${context}`;
       };
 
       // 1. If Gemini API key is present and an image was provided, run Vision analysis
-      if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY' && imageBase64) {
+      if (isGeminiKeyConfigured() && imageBase64) {
         try {
-          const { GoogleGenAI } = await import('@google/genai');
-          const ai = new GoogleGenAI({});
+          const ai = getGeminiClient();
 
           const visionPrompt = `You are an Enterprise Infrastructure Architect & Vision Parser.
 Analyze this architecture diagram image. Identify and extract:
@@ -579,6 +588,132 @@ Format your output strictly as a JSON object matching this schema:
     } catch (error: any) {
       console.error('Multi-modal diagram parsing error:', error);
       res.status(500).json({ error: error.message || 'Diagram parsing failed' });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 4. Server-Side Audio Transcription via gemini-3.5-transcribe + Cloud SQL
+  // ---------------------------------------------------------------------------
+
+  app.post('/api/transcribe-audio', optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const {
+        audioBase64,
+        mimeType,
+        fileName,
+        durationSeconds = 0,
+        targetContext = 'search_query',
+        prompt,
+      } = req.body || {};
+
+      const validated = validateAudioPayload({ audioBase64, mimeType, fileName });
+      if (!validated.ok) {
+        return res.status(400).json({ error: (validated as { ok: false; error: string }).error });
+      }
+
+      if (!isGeminiKeyConfigured()) {
+        return res.status(503).json({
+          error:
+            'GEMINI_API_KEY is not configured. Open Settings > Secrets in AI Studio and add a valid GEMINI_API_KEY to transcribe audio with gemini-3.5-transcribe.',
+        });
+      }
+
+      const ai = getGeminiClient();
+      const audioPart = {
+        inlineData: {
+          mimeType: validated.mimeType,
+          data: validated.base64,
+        },
+      };
+
+      const instructionText =
+        typeof prompt === 'string' && prompt.trim().length > 0
+          ? prompt.trim()
+          : 'Transcribe the spoken words in this audio accurately into clean plain text without adding commentary or timestamps.';
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-transcribe',
+        contents: {
+          parts: [audioPart, { text: instructionText }],
+        },
+      });
+
+      const transcript = response.text?.trim() || '';
+      if (!transcript) {
+        return res.status(422).json({
+          error: 'No speech could be transcribed from the audio recording. Please try speaking closer to the microphone.',
+        });
+      }
+
+      let userEmail = 'guest@enterprise-engine.local';
+      let userId: number | undefined = undefined;
+
+      if (req.user && req.user.uid) {
+        const dbUser = await getOrCreateUser(req.user.uid, req.user.email || `${req.user.uid}@firebase.user`);
+        userId = dbUser.id;
+        userEmail = dbUser.email;
+      }
+
+      const record = await saveAudioTranscript({
+        userId,
+        userEmail,
+        mimeType: validated.mimeType,
+        durationSeconds: Number(durationSeconds) || 0,
+        transcriptText: transcript,
+        modelUsed: 'gemini-3.5-transcribe',
+        targetContext,
+      });
+
+      return res.status(201).json({
+        success: true,
+        transcript,
+        model: 'gemini-3.5-transcribe',
+        record,
+      });
+    } catch (error: any) {
+      console.error('Audio transcription error:', error);
+      const formatted = formatGeminiErrorMessage(error);
+      return res.status(formatted.status).json({ error: formatted.message });
+    }
+  });
+
+  app.get('/api/transcripts', optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      let userId: number | undefined = undefined;
+      if (req.user && req.user.uid) {
+        const dbUser = await getOrCreateUser(req.user.uid, req.user.email || `${req.user.uid}@firebase.user`);
+        userId = dbUser.id;
+      }
+      const data = await getRecentAudioTranscripts(20, userId);
+      return res.json(data);
+    } catch (error: any) {
+      console.error('Failed to get transcripts:', error);
+      return res.status(500).json({ error: 'Failed to fetch audio transcripts from Cloud SQL' });
+    }
+  });
+
+  app.delete('/api/transcripts/:id', optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ error: 'Invalid transcript id' });
+      }
+
+      let userId: number | undefined = undefined;
+      if (req.user && req.user.uid) {
+        const dbUser = await getOrCreateUser(req.user.uid, req.user.email || `${req.user.uid}@firebase.user`);
+        userId = dbUser.id;
+      }
+
+      const deleted = await deleteAudioTranscript(id, userId);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Transcript not found' });
+      }
+
+      return res.json({ success: true, deleted });
+    } catch (error: any) {
+      console.error('Failed to delete transcript:', error);
+      return res.status(500).json({ error: 'Failed to delete audio transcript from Cloud SQL' });
     }
   });
 
