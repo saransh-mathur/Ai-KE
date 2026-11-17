@@ -1,49 +1,31 @@
 import React, { useState, useMemo } from 'react';
 import {
   Search,
-  Sparkles,
-  SlidersHorizontal,
   ChevronDown,
   ChevronUp,
   Copy,
   Check,
-  Save,
   ArrowRight,
-  GitFork,
-  Binary,
-  Layers,
-  Database,
   ShieldAlert,
-  ShieldCheck,
   CheckCircle2,
-  FileText,
   ThumbsUp,
   ThumbsDown,
   Lock,
   EyeOff,
-  Radio,
-  MessageSquare,
-  AlertCircle,
-  HelpCircle,
   X,
-  Mic
+  Database,
 } from 'lucide-react';
-import { VoiceTranscriberPanel } from './VoiceTranscriberPanel.tsx';
 import {
   parseNaturalLanguageQuery,
   executeHybridRetrievalWithRbac,
-  QueryAnalysis
+  QueryAnalysis,
 } from '../lib/hybrid-search.ts';
 import {
   HybridSearchResult,
   SecurityClearanceLevel,
-  RedactedDocumentNotice
+  RedactedDocumentNotice,
 } from '../lib/types.ts';
 import { useAuth } from '../context/AuthContext.tsx';
-
-interface DeveloperCockpitProps {
-  onNavigateToWebhooks?: () => void;
-}
 
 const QUICK_PROMPTS = [
   {
@@ -72,21 +54,16 @@ const QUICK_PROMPTS = [
   },
 ];
 
-export const DeveloperCockpit: React.FC<DeveloperCockpitProps> = ({ onNavigateToWebhooks }) => {
-  const { user, idToken } = useAuth();
+export const DeveloperCockpit: React.FC = () => {
+  const { idToken } = useAuth();
 
-  // Core Search State
+  // Left-panel query & 3 filter dropdowns
   const [queryInput, setQueryInput] = useState<string>(QUICK_PROMPTS[0].query);
   const [selectedRegion, setSelectedRegion] = useState<string>(QUICK_PROMPTS[0].region);
   const [selectedTier, setSelectedTier] = useState<string>(QUICK_PROMPTS[0].tier);
-  const [maxResults, setMaxResults] = useState<number>(5);
-  const [retrievalMode, setRetrievalMode] = useState<'hybrid' | 'vector_only'>('hybrid');
-
-  // RBAC Security Clearance State (L1 Public, L2 Ops SRE, L3 Security Admin)
   const [securityClearance, setSecurityClearance] = useState<SecurityClearanceLevel>('L3_RESTRICTED');
-  const [showRedactedDetails, setShowRedactedDetails] = useState<boolean>(false);
 
-  // RLHF Feedback Loop & Dynamic RRF Parameters
+  // RLHF Feedback & Dynamic RRF tuning
   const [feedbackRating, setFeedbackRating] = useState<'positive' | 'negative' | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
   const [feedbackCategory, setFeedbackCategory] = useState<string>('Missing Graph Context');
@@ -94,48 +71,40 @@ export const DeveloperCockpit: React.FC<DeveloperCockpitProps> = ({ onNavigateTo
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [dynamicRrfK, setDynamicRrfK] = useState<number>(60);
 
-  // UI Disclosure State
-  const [showFilters, setShowFilters] = useState<boolean>(false);
-  const [showVoiceTranscriber, setShowVoiceTranscriber] = useState<boolean>(false);
-  const [showProof, setShowProof] = useState<boolean>(false);
-  const [proofTab, setProofTab] = useState<'graph' | 'chunks' | 'sql'>('graph');
+  // Right-panel drawer & status state
+  const [showProofDrawer, setShowProofDrawer] = useState<boolean>(false);
+  const [showRedactedDetails, setShowRedactedDetails] = useState<boolean>(false);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [savedToDb, setSavedToDb] = useState<boolean>(false);
 
-  // AI Engine & Provider State
-  const [aiProvider, setAiProvider] = useState<'auto' | 'gemini' | 'custom_openai' | 'ollama' | 'deterministic'>('auto');
-  const [ollamaHost, setOllamaHost] = useState<string>('http://localhost:11434');
-  const [ollamaModel, setOllamaModel] = useState<string>('llama3');
+  // AI Answer state
   const [aiAnswerText, setAiAnswerText] = useState<string | null>(null);
-  const [activeModelLabel, setActiveModelLabel] = useState<string>('Google Gemini / Deterministic');
+  const [activeModelLabel, setActiveModelLabel] = useState<string>('Grounded Synthesis Engine');
 
-  // Hybrid Analysis & Execution with RBAC Pre-filtering & Dynamic RRF
   const queryAnalysis: QueryAnalysis = useMemo(() => {
     return parseNaturalLanguageQuery(queryInput);
   }, [queryInput]);
 
   const hybridExecution = useMemo(() => {
     return executeHybridRetrievalWithRbac(queryInput, queryAnalysis, {
-      applySqlFilters: retrievalMode !== 'vector_only',
-      useGraphRank: retrievalMode !== 'vector_only',
+      applySqlFilters: true,
+      useGraphRank: true,
       overrideRegion: selectedRegion,
       overrideTier: selectedTier,
       userClearance: securityClearance,
       kConstant: dynamicRrfK,
-      maxResults,
+      maxResults: 5,
     });
-  }, [queryInput, queryAnalysis, retrievalMode, selectedRegion, selectedTier, securityClearance, dynamicRrfK, maxResults]);
+  }, [queryInput, queryAnalysis, selectedRegion, selectedTier, securityClearance, dynamicRrfK]);
 
   const results: HybridSearchResult[] = hybridExecution.results;
   const redactedNotices: RedactedDocumentNotice[] = hybridExecution.redactedNotices;
-
   const topResult = results[0];
 
-  // Default deterministic synthesis as fallback
   const fallbackGroundedAnswer = useMemo(() => {
     if (results.length === 0) {
-      return 'No matching enterprise IT assets or documentation met the specified criteria. Try loosening the region or vendor tier filters.';
+      return 'No matching enterprise IT assets or documentation met the specified filters and security clearance. Try widening the region, vendor tier, or clearance level.';
     }
 
     if (topResult?.asset.id === 'ast-srv-alpha') {
@@ -147,23 +116,93 @@ export const DeveloperCockpit: React.FC<DeveloperCockpitProps> = ({ onNavigateTo
     }
 
     if (topResult?.incident) {
-      return `The primary affected asset in us-east-1 is "${topResult.asset.name}", provided by ${topResult.vendor.name} (Tier 1).
+      return `The primary affected asset in ${topResult.asset.region} is "${topResult.asset.name}", provided by ${topResult.vendor.name} (Tier ${topResult.vendor.tier}).
 
-• Incident Root Cause: During ${topResult.incident.title} (${topResult.incident.severity}), an unannounced hypervisor microcode rollout saturated cross-AZ throughput, triggering IOPS throttling and 47 minutes of replication lag.
-• Business Unit Impact: The ${topResult.businessUnit.name} team (Cost Center ${topResult.businessUnit.cost_center}) experienced a 12% drop in transaction authorization throughput.
-• Recovery Protocol: Automated failover was initiated per SOP-DB-042 via pg_auto_failover, promoting read replicas within 30 seconds.`;
+• Incident Root Cause: ${topResult.incident.title} (${topResult.incident.severity}) — ${topResult.incident.root_cause}
+• Business Unit Impact: ${topResult.businessUnit.name} (Cost Center ${topResult.businessUnit.cost_center}) relies directly on this asset.
+• Recovery Context: Verified from ${topResult.chunk.document_title} across ${results.length} grounded source chunks.`;
     }
 
-    return `Found ${results.length} verified enterprise records matching "${queryInput}". 
-The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.name} (Tier ${topResult.vendor.tier}, ${topResult.asset.region}), which directly supports the ${topResult.businessUnit.name} division. All citations have been cross-verified against PostgreSQL master data and vector chunks.`;
+    return `Found ${results.length} verified enterprise records matching "${queryInput}".
+
+The top-ranked asset is "${topResult.asset.name}" supplied by ${topResult.vendor.name} (Tier ${topResult.vendor.tier}, ${topResult.asset.region}), supporting the ${topResult.businessUnit.name} division. All citations are verified against relational master data and vector chunks.`;
   }, [results, topResult, queryInput]);
 
   const displayAnswer = aiAnswerText || fallbackGroundedAnswer;
 
+  const handleRunSearch = async () => {
+    setIsSearching(true);
+
+    const contextPayload = results
+      .slice(0, 3)
+      .map(
+        (r, i) => `[Source ${i + 1}: ${r.chunk.document_title}]
+Vendor: ${r.vendor.name} (Tier ${r.vendor.tier}, Status: ${r.vendor.contract_status})
+Asset: ${r.asset.name} (Type: ${r.asset.type}, Region: ${r.asset.region})
+Business Unit: ${r.businessUnit.name} (Cost Center: ${r.businessUnit.cost_center})
+${r.incident ? `Incident: ${r.incident.title} (${r.incident.severity}) - Root Cause: ${r.incident.root_cause}` : 'No active incident'}
+Passage:
+${r.chunk.chunk_text}`
+      )
+      .join('\n\n');
+
+    try {
+      const aiRes = await fetch('/api/generate-ai-answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: queryInput,
+          context: contextPayload || 'No context chunks matched current clearance and filters.',
+          provider: 'auto',
+        }),
+      });
+
+      if (aiRes.ok) {
+        const aiData = await aiRes.json();
+        if (aiData.answer) {
+          setAiAnswerText(aiData.answer);
+          setActiveModelLabel(aiData.provider);
+        } else {
+          setAiAnswerText(null);
+          setActiveModelLabel(aiData.provider || 'Deterministic Grounding Engine');
+        }
+      }
+    } catch {
+      setAiAnswerText(null);
+      setActiveModelLabel('Deterministic Grounding Engine');
+    }
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+
+      await fetch('/api/saved-queries', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          queryText: queryInput,
+          filtersApplied: {
+            region: selectedRegion,
+            tier: selectedTier,
+            clearance: securityClearance,
+          },
+          topResultDoc: topResult?.chunk.document_title || null,
+          rrfScore: topResult?.rrfScore || null,
+        }),
+      });
+      setSavedToDb(true);
+      window.setTimeout(() => setSavedToDb(false), 2500);
+    } catch {
+      // Non-fatal audit logging
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const handleThumbsUp = async () => {
     setFeedbackRating('positive');
-    setFeedbackToast('Feedback recorded! RRF parameters reinforced in RLHF training dataset.');
-    setTimeout(() => setFeedbackToast(null), 3500);
+    setFeedbackToast('Feedback logged to Cloud SQL RLHF dataset.');
+    window.setTimeout(() => setFeedbackToast(null), 3000);
 
     try {
       await fetch('/api/feedback', {
@@ -177,21 +216,17 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
           rrfWeightAdjustment: { kAdjustment: 0, positiveReinforcement: true },
         }),
       });
-    } catch (e) {
-      console.warn('Feedback submission error:', e);
+    } catch {
+      // Non-fatal
     }
-  };
-
-  const handleOpenNegativeFeedback = () => {
-    setShowFeedbackModal(true);
   };
 
   const handleSubmitNegativeFeedback = async () => {
     setFeedbackRating('negative');
     setShowFeedbackModal(false);
-    setDynamicRrfK(65); // Dynamically offsets RRF k factor to favor higher graph-constraint precision
-    setFeedbackToast('Feedback recorded! Dynamic RRF k parameter offset to 65 for tighter rank precision.');
-    setTimeout(() => setFeedbackToast(null), 4000);
+    setDynamicRrfK(65);
+    setFeedbackToast('Feedback recorded. Session RRF k adjusted to 65 for tighter precision.');
+    window.setTimeout(() => setFeedbackToast(null), 3500);
 
     try {
       await fetch('/api/feedback', {
@@ -206,691 +241,486 @@ The highest-ranked asset is "${topResult.asset.name}" from ${topResult.vendor.na
           rrfWeightAdjustment: { kAdjustment: 5, category: feedbackCategory },
         }),
       });
-    } catch (e) {
-      console.warn('Feedback submission error:', e);
-    }
-  };
-
-  const handleRunSearch = async () => {
-    setIsSearching(true);
-
-    // Build context payload
-    const contextPayload = results.slice(0, 3).map((r, i) => `[Source ${i + 1}: ${r.chunk.document_title}]
-Vendor: ${r.vendor.name} (Tier ${r.vendor.tier}, Status: ${r.vendor.contract_status})
-Asset: ${r.asset.name} (Type: ${r.asset.type}, Region: ${r.asset.region})
-Business Unit: ${r.businessUnit.name} (Cost Center: ${r.businessUnit.cost_center})
-${r.incident ? `Incident: ${r.incident.title} (${r.incident.severity}) - Root Cause: ${r.incident.root_cause}` : 'No active incident'}
-Passage:
-${r.chunk.chunk_text}`).join('\n\n');
-
-    // Call backend AI generation endpoint if not strictly deterministic
-    if (aiProvider !== 'deterministic') {
-      try {
-        const aiRes = await fetch('/api/generate-ai-answer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: queryInput,
-            context: contextPayload,
-            provider: aiProvider,
-            ollamaHost,
-            ollamaModel,
-          }),
-        });
-
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          if (aiData.answer) {
-            setAiAnswerText(aiData.answer);
-            setActiveModelLabel(aiData.provider);
-          } else {
-            setAiAnswerText(null);
-            setActiveModelLabel(aiData.provider || 'Deterministic Engine');
-          }
-        }
-      } catch (err) {
-        console.warn('AI generation route unavailable, using local synthesis:', err);
-        setAiAnswerText(null);
-        setActiveModelLabel('Deterministic Engine (Local)');
-      }
-    } else {
-      setAiAnswerText(null);
-      setActiveModelLabel('Deterministic Grounding Engine');
-    }
-
-    // Save to Cloud SQL audit log if user wishes
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
-
-      await fetch('/api/saved-queries', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          queryText: queryInput,
-          filtersApplied: { region: selectedRegion, tier: selectedTier, maxResults, aiProvider },
-          topResultDoc: topResult?.chunk.document_title || null,
-          rrfScore: topResult?.rrfScore || null,
-        }),
-      });
-      setSavedToDb(true);
-      setTimeout(() => setSavedToDb(false), 2500);
     } catch {
       // Non-fatal
     }
-
-    setTimeout(() => {
-      setIsSearching(false);
-    }, 200);
   };
 
-  const handleApplyTranscript = (transcriptText: string, autoRunSearch: boolean = false) => {
-    setQueryInput(transcriptText);
-    if (autoRunSearch) {
-      handleRunSearch();
-    }
-  };
-
-  const handleCopy = () => {
+  const handleCopyAnswer = () => {
     navigator.clipboard.writeText(displayAnswer);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    window.setTimeout(() => setCopied(false), 2000);
   };
 
-  const hasActiveFilters = selectedRegion !== 'all' || selectedTier !== 'all';
-
   return (
-    <div className="space-y-8">
-      {/* =================================================================== */}
-      {/* STEP 1: Hero Search Input & Progressive Disclosure Filters         */}
-      {/* =================================================================== */}
-      <section className="space-y-4">
-        {/* Clean Hero Header */}
-        <div className="space-y-1">
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            What would you like to know about your IT assets &amp; vendors?
-          </h2>
-          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
-            Ask natural language questions across hardware specs, contracts, SLAs, and incident post-mortems.
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Page Title */}
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          Enterprise Knowledge Search
+        </h1>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Hybrid retrieval combining PostgreSQL relational pre-filters, pgvector similarity, and multi-hop entity traversal.
+        </p>
+      </div>
 
-        {/* Input Box Card */}
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-md shadow-slate-200/60 dark:shadow-xl space-y-4">
-          <div className="relative">
-            <textarea
-              value={queryInput}
-              onChange={(e) => setQueryInput(e.target.value)}
-              rows={3}
-              placeholder="e.g. Which Tier-1 database servers in us-east-1 had replication lag incidents?"
-              className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-800 rounded-xl p-4 text-base text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 leading-relaxed resize-none transition-all shadow-inner"
-            />
-          </div>
-
-          {/* Quick Prompt Suggestions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Suggestions:</span>
-            {QUICK_PROMPTS.map((p, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  setQueryInput(p.query);
-                  setSelectedRegion(p.region);
-                  setSelectedTier(p.tier);
-                }}
-                className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800/80 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60 hover:text-indigo-700 dark:hover:text-white hover:border-indigo-200 dark:hover:border-slate-600 transition-all text-left"
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Controls Bar: Advanced Filters, RBAC Switcher, and Search Button */}
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Filters</span>
-                {hasActiveFilters && (
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400" />
-                )}
-                {showFilters ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
-              </button>
-
-              {/* Voice / Audio Transcribe Toggle Button */}
-              <button
-                id="toggle-voice-transcriber-btn"
-                type="button"
-                onClick={() => setShowVoiceTranscriber(!showVoiceTranscriber)}
-                aria-expanded={showVoiceTranscriber}
-                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border transition-colors ${
-                  showVoiceTranscriber
-                    ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                    : 'bg-slate-100 dark:bg-slate-800/60 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border-slate-200 dark:border-slate-700'
-                }`}
-                title="Transcribe voice via microphone or audio file using gemini-3.5-transcribe"
-              >
-                <Mic className={`w-3.5 h-3.5 ${showVoiceTranscriber ? 'text-white' : 'text-rose-600 dark:text-rose-400'}`} />
-                <span>Voice Transcribe</span>
-              </button>
-
-              {/* RBAC Security Clearance Selector */}
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
-                <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono px-1 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> Clearance:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSecurityClearance('L1_PUBLIC')}
-                  className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
-                    securityClearance === 'L1_PUBLIC'
-                      ? 'bg-indigo-600 text-white font-bold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                  title="Level 1: Public Staff (Redacts confidential contracts & SEV-1 root cause postmortems)"
-                >
-                  L1 Public
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSecurityClearance('L2_CONFIDENTIAL')}
-                  className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
-                    securityClearance === 'L2_CONFIDENTIAL'
-                      ? 'bg-indigo-600 text-white font-bold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                  title="Level 2: Operations SRE (Access to standard runbooks and SEV-2 tickets)"
-                >
-                  L2 SRE
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSecurityClearance('L3_RESTRICTED')}
-                  className={`px-2 py-1 rounded-lg text-[11px] font-mono transition-all ${
-                    securityClearance === 'L3_RESTRICTED'
-                      ? 'bg-indigo-600 text-white font-bold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                  title="Level 3: Security Admin / CISO (Unrestricted access to all incidents and executive contracts)"
-                >
-                  L3 Admin
-                </button>
-              </div>
-
-              {onNavigateToWebhooks && (
-                <button
-                  type="button"
-                  onClick={onNavigateToWebhooks}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-medium transition-colors"
-                  title="Open Real-Time Webhook Pipeline Hub"
-                >
-                  <Radio className="w-3 h-3 text-emerald-600 dark:text-emerald-400 animate-pulse" />
-                  <span>Live Webhooks</span>
-                </button>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleRunSearch}
-              disabled={isSearching}
-              className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50 shrink-0"
-            >
-              <Sparkles className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
-              <span>{isSearching ? 'Synthesizing...' : 'Run Intelligent Search'}</span>
-            </button>
-          </div>
-
-          {/* Collapsible Advanced Filters Drawer */}
-          {showFilters && (
-            <div className="pt-4 border-t border-slate-200 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div className="space-y-1.5">
-                <label className="text-slate-700 dark:text-slate-300 font-medium block">Target Region</label>
-                <select
-                  value={selectedRegion}
-                  onChange={(e) => setSelectedRegion(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                >
-                  <option value="all">All Regions (Unfiltered)</option>
-                  <option value="us-east-1">us-east-1 (N. Virginia)</option>
-                  <option value="europe-west1">europe-west1 (Frankfurt / Belgium)</option>
-                  <option value="us-west-2">us-west-2 (Oregon)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-slate-700 dark:text-slate-300 font-medium block">Vendor Tier</label>
-                <select
-                  value={selectedTier}
-                  onChange={(e) => setSelectedTier(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                >
-                  <option value="all">All Tiers (1, 2, 3)</option>
-                  <option value="1">Tier 1 (Mission-Critical / Core)</option>
-                  <option value="2">Tier 2 (Enterprise Standard)</option>
-                  <option value="3">Tier 3 (Commodity)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-slate-700 dark:text-slate-300 font-medium block">Retrieval Engine</label>
-                <select
-                  value={retrievalMode}
-                  onChange={(e) => setRetrievalMode(e.target.value as any)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                >
-                  <option value="hybrid">Hybrid RRF (SQL + Graph + Vector)</option>
-                  <option value="vector_only">Vector Only (Disable Graph)</option>
-                </select>
-              </div>
-
-              {/* AI Generation Provider Selection */}
-              <div className="space-y-1.5 sm:col-span-2">
-                <label className="text-slate-700 dark:text-slate-300 font-medium block">AI Synthesis Model (LLM Provider)</label>
-                <select
-                  value={aiProvider}
-                  onChange={(e) => setAiProvider(e.target.value as any)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                >
-                  <option value="auto">Auto (Configured Cloud API with Deterministic fallback)</option>
-                  <option value="gemini">Google Gemini API (gemini-3.8-flash Cloud)</option>
-                  <option value="custom_openai">Any Online AI API (OpenAI / Groq / OpenRouter via .env)</option>
-                  <option value="ollama">Local Ollama LLM (llama3 / mistral on localhost:11434)</option>
-                  <option value="deterministic">Deterministic Engine (Local Rules, Zero Latency)</option>
-                </select>
-              </div>
-
-              {aiProvider === 'ollama' && (
-                <div className="space-y-1.5">
-                  <label className="text-slate-700 dark:text-slate-300 font-medium block">Ollama Host &amp; Model</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={ollamaHost}
-                      onChange={(e) => setOllamaHost(e.target.value)}
-                      placeholder="http://localhost:11434"
-                      className="w-2/3 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white font-mono"
-                    />
-                    <input
-                      type="text"
-                      value={ollamaModel}
-                      onChange={(e) => setOllamaModel(e.target.value)}
-                      placeholder="llama3"
-                      className="w-1/3 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Collapsible Voice & Audio Transcription Panel (gemini-3.5-transcribe) */}
-          {showVoiceTranscriber && (
-            <VoiceTranscriberPanel
-              onApplyTranscript={handleApplyTranscript}
-              onClose={() => setShowVoiceTranscriber(false)}
-            />
-          )}
-        </div>
-      </section>
-
-      {/* Feedback Toast Notification */}
+      {/* Feedback Toast */}
       {feedbackToast && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-500/50 rounded-xl px-4 py-3 flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top duration-300">
-          <div className="flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-medium">
+        <div
+          role="status"
+          className="bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-500/50 rounded-xl px-4 py-3 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-200"
+        >
+          <div className="flex items-center gap-2 font-medium">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{feedbackToast}</span>
           </div>
           <button
+            type="button"
             onClick={() => setFeedbackToast(null)}
-            className="text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-200 text-xs p-1"
+            aria-label="Dismiss feedback notification"
+            className="p-1 text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-white"
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
-      {/* RBAC Security Clearance Pre-Filtering Redaction Banner */}
-      {redactedNotices.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-600/40 rounded-2xl p-4 sm:p-5 shadow-md space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0 mt-0.5">
-                <ShieldAlert className="w-4 h-4" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="text-sm font-semibold text-amber-950 dark:text-amber-200">
-                    Vector Space RBAC Pre-Filtering Active ({redactedNotices.length} documents redacted)
-                  </h4>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-200/70 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 border border-amber-400/50 dark:border-amber-500/30 font-semibold">
-                    Clearance: {securityClearance}
-                  </span>
-                </div>
-                <p className="text-xs text-amber-900/90 dark:text-amber-300/80 leading-relaxed font-sans">
-                  Your security clearance restricted access to {redactedNotices.length} high-similarity documents (such as confidential vendor pricing or SEV-1 incident root cause post-mortems) before candidate generation. These documents were mathematically pruned from vector space to guarantee zero token leakage into the LLM context window.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowRedactedDetails(!showRedactedDetails)}
-              className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/70 border border-amber-300 dark:border-amber-600/30 text-amber-900 dark:text-amber-200 hover:text-amber-950 dark:hover:text-white transition-colors shrink-0 flex items-center gap-1 font-medium"
+      {/* Main 2-Column Workspace: Left Controls / Right Answer & Proof Drawer */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LEFT COLUMN: Query Input + 3 Clean Dropdowns */}
+        <section className="lg:col-span-5 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xs">
+          <div className="space-y-2">
+            <label
+              htmlFor="knowledge-query-input"
+              className="block text-xs font-semibold text-slate-700 dark:text-slate-200"
             >
-              <EyeOff className="w-3 h-3" />
-              <span>{showRedactedDetails ? 'Hide Pruned Docs' : 'Inspect Pruned Docs'}</span>
-            </button>
+              Natural Language Query
+            </label>
+            <textarea
+              id="knowledge-query-input"
+              value={queryInput}
+              onChange={(e) => {
+                setQueryInput(e.target.value);
+                setAiAnswerText(null);
+              }}
+              rows={4}
+              placeholder="Ask about vendor contracts, assets, regions, or incident post-mortems..."
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl p-3.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 leading-relaxed resize-y"
+            />
           </div>
 
-          {/* Collapsible Details of Redacted Documents */}
-          {showRedactedDetails && (
-            <div className="mt-3 pt-3 border-t border-amber-300/70 dark:border-amber-700/30 space-y-2">
-              <span className="text-[11px] font-mono text-amber-800 dark:text-amber-400 block uppercase tracking-wider font-semibold">
-                Pruned Vectors (Pre-Filtered from RRF Candidate Pool):
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                {redactedNotices.map((notice, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 rounded-xl bg-white dark:bg-slate-950/80 border border-amber-200 dark:border-amber-900/50 flex flex-col justify-between space-y-1.5 shadow-xs"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-slate-900 dark:text-slate-200 truncate">{notice.documentTitle}</span>
-                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30 shrink-0 font-medium">
-                        Requires: {notice.requiredClearance}
-                      </span>
+          {/* Quick Prompt Presets */}
+          <div className="space-y-2">
+            <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+              Sample Queries
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK_PROMPTS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => {
+                    setQueryInput(preset.query);
+                    setSelectedRegion(preset.region);
+                    setSelectedTier(preset.tier);
+                    setAiAnswerText(null);
+                  }}
+                  className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-white border border-slate-200 dark:border-slate-700/70 transition-colors text-left"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3 Clean Dropdowns */}
+          <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="filter-region-select"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+              >
+                Target Region
+              </label>
+              <select
+                id="filter-region-select"
+                value={selectedRegion}
+                onChange={(e) => setSelectedRegion(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              >
+                <option value="all">All Regions</option>
+                <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                <option value="europe-west1">europe-west1 (Frankfurt / Belgium)</option>
+                <option value="us-west-2">us-west-2 (Oregon)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="filter-tier-select"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+              >
+                Vendor Tier
+              </label>
+              <select
+                id="filter-tier-select"
+                value={selectedTier}
+                onChange={(e) => setSelectedTier(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              >
+                <option value="all">All Tiers</option>
+                <option value="1">Tier 1 (Mission-Critical)</option>
+                <option value="2">Tier 2 (Enterprise Standard)</option>
+                <option value="3">Tier 3 (Commodity)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="filter-clearance-select"
+                className="block text-xs font-medium text-slate-700 dark:text-slate-300"
+              >
+                Security Clearance (RBAC)
+              </label>
+              <select
+                id="filter-clearance-select"
+                value={securityClearance}
+                onChange={(e) => setSecurityClearance(e.target.value as SecurityClearanceLevel)}
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+              >
+                <option value="L3_RESTRICTED">L3 Restricted (Security Admin)</option>
+                <option value="L2_CONFIDENTIAL">L2 Confidential (Operations SRE)</option>
+                <option value="L1_PUBLIC">L1 Public (General Staff)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Primary Search CTA */}
+          <button
+            id="run-knowledge-search-btn"
+            type="button"
+            onClick={handleRunSearch}
+            disabled={isSearching || !queryInput.trim()}
+            className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm shadow-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            <Search className="w-4 h-4" />
+            <span>{isSearching ? 'Searching...' : 'Run Knowledge Search'}</span>
+          </button>
+        </section>
+
+        {/* RIGHT COLUMN: Top AI Answer Card + Expandable Drawer Below */}
+        <div className="lg:col-span-7 space-y-4">
+          {/* RBAC Pre-Filtering Redaction Notice (when lower clearance prunes chunks) */}
+          {redactedNotices.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-600/40 rounded-2xl p-4 space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <div className="font-semibold text-amber-950 dark:text-amber-200">
+                      RBAC Pre-Filter Redacted {redactedNotices.length} Restricted Document{redactedNotices.length > 1 ? 's' : ''}
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 font-mono">
-                      <span>Cosine Similarity: {notice.vectorSimilarity.toFixed(3)}</span>
-                      <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1 font-semibold">
-                        <Lock className="w-3 h-3" /> Redacted
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 italic">
-                      {notice.reason}
+                    <p className="text-amber-900/90 dark:text-amber-300/80 leading-relaxed">
+                      Documents exceeding <span className="font-mono font-semibold">{securityClearance}</span> were excluded before vector ranking and LLM grounding.
                     </p>
                   </div>
-                ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRedactedDetails(!showRedactedDetails)}
+                  className="text-xs px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/70 border border-amber-300 dark:border-amber-600/30 text-amber-900 dark:text-amber-200 shrink-0 flex items-center gap-1 font-medium whitespace-nowrap"
+                >
+                  <EyeOff className="w-3 h-3" />
+                  <span>{showRedactedDetails ? 'Hide' : 'Inspect'}</span>
+                </button>
               </div>
+
+              {showRedactedDetails && (
+                <div className="pt-2 border-t border-amber-300/70 dark:border-amber-700/30 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {redactedNotices.map((notice) => (
+                    <div
+                      key={notice.id}
+                      className="p-2.5 rounded-xl bg-white dark:bg-slate-950 border border-amber-200 dark:border-amber-900/50 space-y-1"
+                    >
+                      <div className="font-medium text-slate-900 dark:text-slate-200 truncate">
+                        {notice.documentTitle}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                        <span>Requires {notice.requiredClearance}</span>
+                        <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> Pruned
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {/* =================================================================== */}
-      {/* STEP 2: The Primary Focal Point — Grounded AI Answer Card          */}
-      {/* =================================================================== */}
-      <section className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-lg shadow-slate-200/70 dark:shadow-2xl space-y-5">
-        {/* Answer Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800/80">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-              <Sparkles className="w-4 h-4" />
+          {/* Top Card: AI Grounded Answer */}
+          <section
+            aria-label="AI Grounded Answer"
+            className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-xs"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="space-y-0.5">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                  AI Grounded Answer
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                  <span>{activeModelLabel}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="font-mono tabular-nums">RRF k={dynamicRrfK}</span>
+                  {savedToDb && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">Logged to Cloud SQL</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-800 gap-1">
+                  <button
+                    type="button"
+                    onClick={handleThumbsUp}
+                    aria-label="Mark answer helpful"
+                    className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors whitespace-nowrap ${
+                      feedbackRating === 'positive'
+                        ? 'bg-emerald-600 text-white font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400'
+                    }`}
+                  >
+                    <ThumbsUp className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Helpful</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowFeedbackModal(true)}
+                    aria-label="Report answer issue"
+                    className={`px-2 py-1 rounded text-xs flex items-center gap-1 transition-colors whitespace-nowrap ${
+                      feedbackRating === 'negative'
+                        ? 'bg-rose-600 text-white font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400'
+                    }`}
+                  >
+                    <ThumbsDown className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Issue</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCopyAnswer}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium border border-slate-200 dark:border-slate-700 transition-colors whitespace-nowrap"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">AI Grounded Answer</h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20 font-medium">
-                  {activeModelLabel}
+
+            <div
+              data-testid="ai-answer-body"
+              className="text-sm sm:text-base text-slate-800 dark:text-slate-100 leading-relaxed whitespace-pre-line"
+            >
+              {displayAnswer}
+            </div>
+
+            {topResult && (
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+                <span>
+                  Vendor: <strong className="text-slate-900 dark:text-white">{topResult.vendor.name}</strong> (Tier {topResult.vendor.tier})
                 </span>
-                {dynamicRrfK !== 60 && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 font-medium">
-                    RLHF k={dynamicRrfK}
-                  </span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  Asset: <strong className="text-slate-900 dark:text-white">{topResult.asset.name}</strong> ({topResult.asset.region})
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  BU: <strong className="text-slate-900 dark:text-white">{topResult.businessUnit.name}</strong>
+                </span>
+                {topResult.incident && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="text-rose-700 dark:text-rose-300 font-medium">
+                      Incident: {topResult.incident.severity}
+                    </span>
+                  </>
                 )}
               </div>
-              <span className="text-xs text-slate-600 dark:text-slate-400">Grounded via PostgreSQL Master Data &amp; Incident Post-Mortems</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* RLHF Feedback Loop Buttons (Thumbs Up / Thumbs Down) */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 gap-1 mr-1">
-              <button
-                type="button"
-                onClick={handleThumbsUp}
-                className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs ${
-                  feedbackRating === 'positive'
-                    ? 'bg-emerald-600 text-white font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-slate-800'
-                }`}
-                title="Accurate Answer: Logs positive reinforcement to RLHF fine-tuning dataset"
-              >
-                <ThumbsUp className="w-3.5 h-3.5" />
-                <span className="text-[11px] hidden sm:inline">Helpful</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenNegativeFeedback}
-                className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs ${
-                  feedbackRating === 'negative'
-                    ? 'bg-rose-600 text-white font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-slate-800'
-                }`}
-                title="Report Inaccuracy: Opens feedback modal and dynamically re-tunes RRF parameter"
-              >
-                <ThumbsDown className="w-3.5 h-3.5" />
-                <span className="text-[11px] hidden sm:inline">Issue</span>
-              </button>
-            </div>
-
-            {savedToDb && (
-              <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-mono font-medium">
-                <Check className="w-3.5 h-3.5" /> Saved
-              </span>
             )}
+          </section>
+
+          {/* Bottom Expandable Drawer: 4-Node Visual Chain + Matched Text Chunk */}
+          <section className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
             <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-medium border border-slate-200 dark:border-slate-700/80 transition-colors"
+              id="toggle-retrieval-drawer-btn"
+              type="button"
+              onClick={() => setShowProofDrawer(!showProofDrawer)}
+              aria-expanded={showProofDrawer}
+              className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied' : 'Copy'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Answer Text: Large, High-Readability Typography */}
-        <div className="text-base sm:text-lg text-slate-800 dark:text-slate-100 leading-relaxed font-sans whitespace-pre-line">
-          {displayAnswer}
-        </div>
-
-        {/* Clean Entity Provenance Tags */}
-        {topResult && (
-          <div className="pt-3 border-t border-slate-200 dark:border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-600 dark:text-slate-400 font-medium">Entities:</span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
-              Vendor: <strong className="text-slate-900 dark:text-white">{topResult.vendor.name}</strong> (Tier {topResult.vendor.tier})
-            </span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
-              Asset: <strong className="text-slate-900 dark:text-white">{topResult.asset.name}</strong> ({topResult.asset.region})
-            </span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
-              BU: <strong className="text-slate-900 dark:text-white">{topResult.businessUnit.name}</strong>
-            </span>
-            {topResult.incident && (
-              <span className="px-2.5 py-1 rounded-md bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-300 font-medium">
-                Incident: {topResult.incident.severity}
-              </span>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* =================================================================== */}
-      {/* STEP 3: Collapsible "Under the Hood: Retrieval Proof"               */}
-      {/* =================================================================== */}
-      <section className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/80 rounded-2xl overflow-hidden shadow-md dark:shadow-lg">
-        {/* Accordion Toggle Bar */}
-        <button
-          type="button"
-          onClick={() => setShowProof(!showProof)}
-          className="w-full p-4 sm:p-5 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-transparent flex items-center justify-center text-slate-700 dark:text-slate-300 text-xs font-mono font-bold">
-              {showProof ? '−' : '+'}
-            </span>
-            <div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white block">
-                Under the Hood: Retrieval Proof
-              </span>
-              <span className="text-xs text-slate-600 dark:text-slate-400 block">
-                {results.length} verified sources &bull; Multi-hop graph chain &bull; Single-pass SQL CTE
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-500/20 hidden sm:inline font-medium">
-              RRF: {topResult ? topResult.rrfScore.toFixed(5) : '0.000'}
-            </span>
-            {showProof ? <ChevronUp className="w-4 h-4 text-slate-500 dark:text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-500 dark:text-slate-400" />}
-          </div>
-        </button>
-
-        {/* Collapsible Content */}
-        {showProof && (
-          <div className="p-5 sm:p-6 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-950/60 space-y-5">
-            {/* Sub-tabs for under-the-hood inspection */}
-            <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 text-xs font-medium">
-              <button
-                onClick={() => setProofTab('graph')}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  proofTab === 'graph'
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-transparent'
-                }`}
-              >
-                Multi-Hop Graph Path
-              </button>
-              <button
-                onClick={() => setProofTab('chunks')}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  proofTab === 'chunks'
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-transparent'
-                }`}
-              >
-                Vector Chunks ({results.length})
-              </button>
-              <button
-                onClick={() => setProofTab('sql')}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
-                  proofTab === 'sql'
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-transparent'
-                }`}
-              >
-                SQL CTE Predicates
-              </button>
-            </div>
-
-            {/* Sub-tab 1: Multi-Hop Graph Path */}
-            {proofTab === 'graph' && topResult && (
-              <div className="space-y-3">
-                <div className="text-xs text-slate-600 dark:text-slate-400">
-                  Transitive entity chain connecting master records to live incidents:
+              <div>
+                <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Retrieval Trace: 4-Node Entity Chain &amp; Matched Chunk
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs font-sans">
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                    <span className="text-[10px] font-mono text-blue-700 dark:text-blue-400 uppercase block font-semibold">1. Vendor</span>
-                    <strong className="text-slate-900 dark:text-white block mt-0.5">{topResult.vendor.name}</strong>
-                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Tier {topResult.vendor.tier} &bull; {topResult.vendor.contract_status}</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                    <span className="text-[10px] font-mono text-indigo-700 dark:text-indigo-400 uppercase block font-semibold">2. Asset (Supplies)</span>
-                    <strong className="text-slate-900 dark:text-white block mt-0.5">{topResult.asset.name}</strong>
-                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">{topResult.asset.type} &bull; {topResult.asset.region}</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                    <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 uppercase block font-semibold">3. Business Unit</span>
-                    <strong className="text-slate-900 dark:text-white block mt-0.5">{topResult.businessUnit.name}</strong>
-                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">{topResult.businessUnit.cost_center}</span>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-                    <span className="text-[10px] font-mono text-rose-700 dark:text-rose-400 uppercase block font-semibold">4. Incident / Post-Mortem</span>
-                    {topResult.incident ? (
-                      <>
-                        <strong className="text-rose-700 dark:text-rose-300 block mt-0.5 truncate">{topResult.incident.title}</strong>
-                        <span className="text-slate-600 dark:text-slate-400 text-[11px]">{topResult.incident.severity} &bull; {topResult.incident.downtime_minutes}m downtime</span>
-                      </>
-                    ) : (
-                      <span className="text-slate-500 italic block mt-1">No active severity incidents</span>
-                    )}
-                  </div>
+                <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums">
+                  {results.length} matched source{results.length === 1 ? '' : 's'} · RRF {topResult ? topResult.rrfScore.toFixed(5) : '0.00000'}
                 </div>
               </div>
-            )}
+              <div className="flex items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-400 shrink-0">
+                <span>{showProofDrawer ? 'Collapse' : 'Inspect Trace'}</span>
+                {showProofDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </button>
 
-            {/* Sub-tab 2: Vector Chunks */}
-            {proofTab === 'chunks' && (
-              <div className="space-y-3">
-                {results.map((res, i) => (
-                  <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-xl p-4 text-xs space-y-2 shadow-xs">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">ID: {res.chunk.id}</span>
-                        <span className="text-slate-400">&bull;</span>
-                        <span className="font-medium text-slate-900 dark:text-white">{res.chunk.document_title}</span>
-                      </div>
-                      <div className="font-mono text-indigo-700 dark:text-indigo-300 font-semibold">
-                        Similarity: {res.vectorSimilarity.toFixed(3)}
+            {showProofDrawer && (
+              <div
+                id="retrieval-proof-drawer-content"
+                className="p-5 sm:p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 space-y-6"
+              >
+                {topResult ? (
+                  <>
+                    {/* 1. 4-Node Visual Chain: Vendor -> Asset -> BU -> Incident */}
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        4-Node Relationship Chain (Vendor → Asset → Business Unit → Incident)
+                      </h3>
+
+                      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
+                        {/* Node 1: Vendor */}
+                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <div className="text-[11px] font-mono text-indigo-700 dark:text-indigo-400 font-semibold whitespace-nowrap">
+                            1. Vendor
+                          </div>
+                          <div className="text-xs font-semibold text-slate-900 dark:text-white mt-0.5 truncate" title={topResult.vendor.name}>
+                            {topResult.vendor.name}
+                          </div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums truncate">
+                            Tier {topResult.vendor.tier} · {topResult.vendor.contract_status}
+                          </div>
+                        </div>
+
+                        <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 self-center rotate-90 md:rotate-0" />
+
+                        {/* Node 2: Asset */}
+                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <div className="text-[11px] font-mono text-sky-700 dark:text-sky-400 font-semibold whitespace-nowrap">
+                            2. Asset
+                          </div>
+                          <div className="text-xs font-semibold text-slate-900 dark:text-white mt-0.5 truncate" title={topResult.asset.name}>
+                            {topResult.asset.name}
+                          </div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 truncate">
+                            {topResult.asset.type} · {topResult.asset.region}
+                          </div>
+                        </div>
+
+                        <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 self-center rotate-90 md:rotate-0" />
+
+                        {/* Node 3: BU */}
+                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <div className="text-[11px] font-mono text-amber-700 dark:text-amber-400 font-semibold whitespace-nowrap">
+                            3. Business Unit
+                          </div>
+                          <div className="text-xs font-semibold text-slate-900 dark:text-white mt-0.5 truncate" title={topResult.businessUnit.name}>
+                            {topResult.businessUnit.name}
+                          </div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-mono truncate">
+                            {topResult.businessUnit.cost_center}
+                          </div>
+                        </div>
+
+                        <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 self-center rotate-90 md:rotate-0" />
+
+                        {/* Node 4: Incident */}
+                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                          <div className="text-[11px] font-mono text-rose-700 dark:text-rose-400 font-semibold whitespace-nowrap">
+                            4. Incident
+                          </div>
+                          {topResult.incident ? (
+                            <>
+                              <div className="text-xs font-semibold text-rose-700 dark:text-rose-300 mt-0.5 truncate" title={topResult.incident.title}>
+                                {topResult.incident.title}
+                              </div>
+                              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums truncate">
+                                {topResult.incident.severity} · {topResult.incident.downtime_minutes}m
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                              No active incidents
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <p className="text-slate-700 dark:text-slate-300 text-xs leading-relaxed font-sans">
-                      {res.chunk.chunk_text}
-                    </p>
+
+                    {/* 2. Matched Text Chunk */}
+                    <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Matched Vector Chunk
+                        </h3>
+                        <div className="flex items-center gap-3 text-xs font-mono tabular-nums text-slate-600 dark:text-slate-400">
+                          <span>Similarity: <strong className="text-slate-900 dark:text-white">{topResult.vectorSimilarity.toFixed(3)}</strong></span>
+                          <span aria-hidden="true">·</span>
+                          <span>RRF: <strong className="text-indigo-700 dark:text-indigo-400">{topResult.rrfScore.toFixed(5)}</strong></span>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                            {topResult.chunk.document_title}
+                          </span>
+                          <span className="font-mono text-slate-500 dark:text-slate-400">
+                            {topResult.chunk.id} · {topResult.chunk.doc_type}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                          {topResult.chunk.chunk_text}
+                        </p>
+                      </div>
+
+                      {/* Additional matched chunks summary if any */}
+                      {results.length > 1 && (
+                        <div className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                          <Database className="w-3.5 h-3.5 text-slate-400" />
+                          <span>
+                            Also matched: {results.slice(1).map((r) => r.chunk.document_title).join(' · ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-slate-600 dark:text-slate-400 py-4 text-center">
+                    No matching nodes or vector chunks available under the current filters and clearance.
                   </div>
-                ))}
+                )}
               </div>
             )}
+          </section>
+        </div>
+      </div>
 
-            {/* Sub-tab 3: SQL CTE Predicates */}
-            {proofTab === 'sql' && (
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs">
-                <span className="text-slate-600 dark:text-slate-400 block text-[11px]">Generated Relational SQL Pre-filter:</span>
-                <pre className="bg-slate-900 dark:bg-slate-950 text-indigo-300 p-3 rounded-lg overflow-x-auto leading-relaxed">
-{`WHERE ${selectedTier !== 'all' ? `v.tier = '${selectedTier}'` : 'v.tier IS NOT NULL'}
-  AND ${selectedRegion !== 'all' ? `a.region = '${selectedRegion}'` : 'a.region IS NOT NULL'}`}
-                </pre>
-                <span className="text-slate-600 dark:text-slate-500 block text-[11px] pt-1">
-                  Executes single-pass CTE in PostgreSQL with HNSW vector search (<code className="text-indigo-700 dark:text-slate-400">&lt;=&gt;</code>) and RRF fusion.
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* =================================================================== */}
-      {/* RLHF Negative Feedback & Dynamic RRF Tuning Modal                   */}
-      {/* =================================================================== */}
+      {/* RLHF Negative Feedback Modal */}
       {showFeedbackModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400">
-                  <ThumbsDown className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Log Retrieval Inaccuracy</h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">RLHF training signal &amp; dynamic RRF weight tuning</p>
-                </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Log Retrieval Issue</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400">Logs correction signal to Cloud SQL feedback_logs</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowFeedbackModal(false)}
+                aria-label="Close modal"
                 className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white p-1"
               >
                 <X className="w-4 h-4" />
@@ -899,41 +729,34 @@ ${r.chunk.chunk_text}`).join('\n\n');
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">Issue Category</label>
+                <label htmlFor="feedback-category-select" className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
+                  Issue Category
+                </label>
                 <select
+                  id="feedback-category-select"
                   value={feedbackCategory}
                   onChange={(e) => setFeedbackCategory(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white"
                 >
-                  <option value="Missing Graph Context">Missing Graph Context (Hop disconnected between vendor &amp; asset)</option>
-                  <option value="Hallucinated Entity Detail">Hallucinated Entity Detail (Spec or metric not grounded in master data)</option>
-                  <option value="Incorrect Incident Correlation">Incorrect Incident Correlation (Wrong severity or root cause)</option>
-                  <option value="Stale Policy or SLA">Stale Policy or SLA (Outdated vendor contract clause)</option>
-                  <option value="Semantic Drift">Semantic Drift (Vector chunk top match had low relevance)</option>
+                  <option value="Missing Graph Context">Missing Graph Context</option>
+                  <option value="Hallucinated Entity Detail">Hallucinated Entity Detail</option>
+                  <option value="Incorrect Incident Correlation">Incorrect Incident Correlation</option>
+                  <option value="Stale Policy or SLA">Stale Policy or SLA</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
-                  Correction / Engineer Note (Optional)
+                <label htmlFor="feedback-note-input" className="text-slate-700 dark:text-slate-300 font-medium block mb-1">
+                  Correction Note (Optional)
                 </label>
                 <textarea
+                  id="feedback-note-input"
                   value={feedbackNote}
                   onChange={(e) => setFeedbackNote(e.target.value)}
                   rows={3}
-                  placeholder="e.g. Expected SRV-Alpha to link directly to CC-SEC-0010 without relying on secondary incident notes..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500/40 resize-none"
+                  placeholder="Describe expected vendor, asset, or incident link..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 resize-none"
                 />
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 space-y-1">
-                <div className="flex items-center gap-2 font-mono text-[11px] text-indigo-700 dark:text-indigo-300 font-semibold">
-                  <Binary className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  <span>Dynamic Parameter Adjustment:</span>
-                </div>
-                <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Submitting this correction sets the local session RRF constant to <strong className="text-slate-900 dark:text-white font-mono">k = 65</strong> (tighter rank curve, punishing low-scoring vector noise) and appends this pair to the PostgreSQL <code className="text-indigo-700 dark:text-slate-300 font-semibold">feedback_logs</code> table for future retrieval model fine-tuning.
-                </p>
               </div>
             </div>
 
@@ -941,16 +764,16 @@ ${r.chunk.chunk_text}`).join('\n\n');
               <button
                 type="button"
                 onClick={() => setShowFeedbackModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSubmitNegativeFeedback}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/25 transition-all"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500"
               >
-                Submit Correction &amp; Re-tune RRF
+                Submit &amp; Tune RRF
               </button>
             </div>
           </div>

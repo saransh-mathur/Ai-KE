@@ -12,6 +12,7 @@ import {
   audioTranscripts,
 } from './schema.ts';
 import { eq, desc, and } from 'drizzle-orm';
+import { buildSeedPayloads } from '../lib/seed-data.ts';
 
 /**
  * User Registration & Synchronization helper using upsert to avoid race conditions.
@@ -414,5 +415,51 @@ export async function deleteAudioTranscript(id: number, userId?: number) {
   } catch (error) {
     console.error('Failed to delete audio transcript:', error);
     throw new Error('Failed to delete audio transcript from database', { cause: error });
+  }
+}
+
+/**
+ * Fetch all business units from Cloud SQL
+ */
+export async function getAllBusinessUnits() {
+  try {
+    return await db.select().from(businessUnits);
+  } catch (error) {
+    console.error('Failed to fetch business units:', error);
+    throw new Error('Database query for business units failed', { cause: error });
+  }
+}
+
+/**
+ * Idempotently populate Cloud SQL with demo master data, assets, incidents, and knowledge chunks.
+ */
+export async function seedDemoData() {
+  try {
+    const payloads = buildSeedPayloads();
+
+    await db.insert(vendors).values(payloads.vendors).onConflictDoNothing();
+    await db.insert(businessUnits).values(payloads.businessUnits).onConflictDoNothing();
+    await db.insert(assets).values(payloads.assets).onConflictDoNothing();
+    await db.insert(incidents).values(payloads.incidents).onConflictDoNothing();
+    await db.insert(knowledgeChunks).values(payloads.knowledgeChunks).onConflictDoNothing();
+
+    const [vendorRows, buRows, assetRows, incidentRows, chunkRows] = await Promise.all([
+      db.select().from(vendors),
+      db.select().from(businessUnits),
+      db.select().from(assets),
+      db.select().from(incidents),
+      db.select().from(knowledgeChunks),
+    ]);
+
+    return {
+      vendors: vendorRows.length,
+      businessUnits: buRows.length,
+      assets: assetRows.length,
+      incidents: incidentRows.length,
+      knowledgeChunks: chunkRows.length,
+    };
+  } catch (error) {
+    console.error('Failed to seed demo data into Cloud SQL:', error);
+    throw new Error('Failed to seed demo data into Cloud SQL', { cause: error });
   }
 }
