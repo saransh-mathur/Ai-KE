@@ -24,8 +24,10 @@ import {
   HybridSearchResult,
   SecurityClearanceLevel,
   RedactedDocumentNotice,
+  HybridRetrievalExecutionResponse,
 } from '../lib/types.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { KnowledgeGraphD3 } from './KnowledgeGraphD3.tsx';
 
 const QUICK_PROMPTS = [
   {
@@ -72,21 +74,22 @@ export const DeveloperCockpit: React.FC = () => {
   const [dynamicRrfK, setDynamicRrfK] = useState<number>(60);
 
   // Right-panel drawer & status state
-  const [showProofDrawer, setShowProofDrawer] = useState<boolean>(false);
+  const [showProofDrawer, setShowProofDrawer] = useState<boolean>(true);
   const [showRedactedDetails, setShowRedactedDetails] = useState<boolean>(false);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [savedToDb, setSavedToDb] = useState<boolean>(false);
 
-  // AI Answer state
+  // AI Answer & Live DB Retrieval state
   const [aiAnswerText, setAiAnswerText] = useState<string | null>(null);
   const [activeModelLabel, setActiveModelLabel] = useState<string>('Grounded Synthesis Engine');
+  const [liveExecution, setLiveExecution] = useState<HybridRetrievalExecutionResponse | null>(null);
 
   const queryAnalysis: QueryAnalysis = useMemo(() => {
     return parseNaturalLanguageQuery(queryInput);
   }, [queryInput]);
 
-  const hybridExecution = useMemo(() => {
+  const localExecution = useMemo(() => {
     return executeHybridRetrievalWithRbac(queryInput, queryAnalysis, {
       applySqlFilters: true,
       useGraphRank: true,
@@ -98,6 +101,7 @@ export const DeveloperCockpit: React.FC = () => {
     });
   }, [queryInput, queryAnalysis, selectedRegion, selectedTier, securityClearance, dynamicRrfK]);
 
+  const hybridExecution = liveExecution || localExecution;
   const results: HybridSearchResult[] = hybridExecution.results;
   const redactedNotices: RedactedDocumentNotice[] = hybridExecution.redactedNotices;
   const topResult = results[0];
@@ -133,7 +137,35 @@ The top-ranked asset is "${topResult.asset.name}" supplied by ${topResult.vendor
   const handleRunSearch = async () => {
     setIsSearching(true);
 
-    const contextPayload = results
+    let activeResults = results;
+    let activeTopResult = topResult;
+
+    try {
+      const dbRes = await fetch('/api/hybrid-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: queryInput,
+          region: selectedRegion,
+          tier: selectedTier,
+          clearance: securityClearance,
+          kConstant: dynamicRrfK,
+          maxResults: 5,
+        }),
+      });
+      if (dbRes.ok) {
+        const dbData = await dbRes.json();
+        if (dbData?.rowCount > 0 && dbData?.execution) {
+          setLiveExecution(dbData.execution);
+          activeResults = dbData.execution.results || activeResults;
+          activeTopResult = activeResults[0];
+        }
+      }
+    } catch {
+      // Fallback to local execution seamlessly if DB is offline
+    }
+
+    const contextPayload = activeResults
       .slice(0, 3)
       .map(
         (r, i) => `[Source ${i + 1}: ${r.chunk.document_title}]
@@ -186,8 +218,8 @@ ${r.chunk.chunk_text}`
             tier: selectedTier,
             clearance: securityClearance,
           },
-          topResultDoc: topResult?.chunk.document_title || null,
-          rrfScore: topResult?.rrfScore || null,
+          topResultDoc: activeTopResult?.chunk.document_title || null,
+          rrfScore: activeTopResult?.rrfScore || null,
         }),
       });
       setSavedToDb(true);
@@ -302,6 +334,7 @@ ${r.chunk.chunk_text}`
               onChange={(e) => {
                 setQueryInput(e.target.value);
                 setAiAnswerText(null);
+                setLiveExecution(null);
               }}
               rows={4}
               placeholder="Ask about vendor contracts, assets, regions, or incident post-mortems..."
@@ -324,6 +357,7 @@ ${r.chunk.chunk_text}`
                     setSelectedRegion(preset.region);
                     setSelectedTier(preset.tier);
                     setAiAnswerText(null);
+                    setLiveExecution(null);
                   }}
                   className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-white border border-slate-200 dark:border-slate-700/70 transition-colors text-left"
                 >
@@ -345,7 +379,10 @@ ${r.chunk.chunk_text}`
               <select
                 id="filter-region-select"
                 value={selectedRegion}
-                onChange={(e) => setSelectedRegion(e.target.value)}
+                onChange={(e) => {
+                  setSelectedRegion(e.target.value);
+                  setLiveExecution(null);
+                }}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               >
                 <option value="all">All Regions</option>
@@ -365,7 +402,10 @@ ${r.chunk.chunk_text}`
               <select
                 id="filter-tier-select"
                 value={selectedTier}
-                onChange={(e) => setSelectedTier(e.target.value)}
+                onChange={(e) => {
+                  setSelectedTier(e.target.value);
+                  setLiveExecution(null);
+                }}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               >
                 <option value="all">All Tiers</option>
@@ -385,7 +425,10 @@ ${r.chunk.chunk_text}`
               <select
                 id="filter-clearance-select"
                 value={securityClearance}
-                onChange={(e) => setSecurityClearance(e.target.value as SecurityClearanceLevel)}
+                onChange={(e) => {
+                  setSecurityClearance(e.target.value as SecurityClearanceLevel);
+                  setLiveExecution(null);
+                }}
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               >
                 <option value="L3_RESTRICTED">L3 Restricted (Security Admin)</option>
@@ -565,14 +608,14 @@ ${r.chunk.chunk_text}`
             >
               <div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Retrieval Trace: 4-Node Entity Chain &amp; Matched Chunk
+                  Retrieval Trace: D3 Multi-Hop Graph, 4-Node Chain &amp; Matched Chunk
                 </div>
                 <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums">
                   {results.length} matched source{results.length === 1 ? '' : 's'} · RRF {topResult ? topResult.rrfScore.toFixed(5) : '0.00000'}
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs font-medium text-indigo-700 dark:text-indigo-400 shrink-0">
-                <span>{showProofDrawer ? 'Collapse' : 'Inspect Trace'}</span>
+                <span>{showProofDrawer ? 'Collapse' : 'Inspect Graph & Trace'}</span>
                 {showProofDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </div>
             </button>
@@ -659,7 +702,18 @@ ${r.chunk.chunk_text}`
                       </div>
                     </div>
 
-                    {/* 2. Matched Text Chunk */}
+                    {/* 2. Interactive D3.js Multi-Hop Knowledge Graph */}
+                    <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                      <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Multi-Hop Knowledge Graph Traversal (D3.js)
+                      </h3>
+                      <KnowledgeGraphD3
+                        activeResults={results}
+                        userClearance={securityClearance}
+                      />
+                    </div>
+
+                    {/* 3. Matched Text Chunk */}
                     <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">

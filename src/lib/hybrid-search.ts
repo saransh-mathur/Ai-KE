@@ -161,6 +161,14 @@ export function parseNaturalLanguageQuery(query: string): QueryAnalysis {
   };
 }
 
+export interface EnterpriseKnowledgeDataset {
+  vendors: Vendor[];
+  assets: Asset[];
+  businessUnits: BusinessUnit[];
+  incidents: Incident[];
+  knowledgeChunks: KnowledgeChunk[];
+}
+
 export interface HybridRetrievalOptions {
   applySqlFilters?: boolean;
   useGraphRank?: boolean;
@@ -179,9 +187,10 @@ export interface HybridRetrievalOptions {
  * 4. Calculate Vector Cosine Similarity
  * 5. Combine via Reciprocal Rank Fusion (RRF)
  */
-export function executeHybridRetrievalWithRbac(
+export function executeHybridRetrievalWithDataset(
   query: string,
   analysis: QueryAnalysis,
+  dataset: EnterpriseKnowledgeDataset,
   options: HybridRetrievalOptions = {}
 ): HybridRetrievalExecutionResponse {
   const {
@@ -210,12 +219,14 @@ export function executeHybridRetrievalWithRbac(
   let evaluatedCount = 0;
   let graphHopsCount = 0;
 
-  for (const chunk of MOCK_KNOWLEDGE_CHUNKS) {
+  for (const chunk of dataset.knowledgeChunks) {
     evaluatedCount++;
-    const asset = MOCK_ASSETS.find(a => a.id === chunk.asset_id)!;
-    const vendor = MOCK_VENDORS.find(v => v.id === asset.vendor_id)!;
-    const businessUnit = MOCK_BUSINESS_UNITS.find(b => b.id === asset.business_unit_id)!;
-    const incident = MOCK_INCIDENTS.find(i => i.asset_id === asset.id);
+    const asset = dataset.assets.find(a => a.id === chunk.asset_id);
+    if (!asset) continue;
+    const vendor = dataset.vendors.find(v => v.id === asset.vendor_id);
+    const businessUnit = dataset.businessUnits.find(b => b.id === asset.business_unit_id);
+    if (!vendor || !businessUnit) continue;
+    const incident = dataset.incidents.find(i => i.asset_id === asset.id);
 
     // Vector similarity score
     const vectorScore = computeSimulatedCosineSimilarity(query, chunk);
@@ -350,6 +361,25 @@ export function executeHybridRetrievalWithRbac(
     totalCandidatesEvaluated: evaluatedCount,
     graphHopsResolved: graphHopsCount,
   };
+}
+
+export function executeHybridRetrievalWithRbac(
+  query: string,
+  analysis: QueryAnalysis,
+  options: HybridRetrievalOptions = {}
+): HybridRetrievalExecutionResponse {
+  return executeHybridRetrievalWithDataset(
+    query,
+    analysis,
+    {
+      vendors: MOCK_VENDORS,
+      assets: MOCK_ASSETS,
+      businessUnits: MOCK_BUSINESS_UNITS,
+      incidents: MOCK_INCIDENTS,
+      knowledgeChunks: MOCK_KNOWLEDGE_CHUNKS,
+    },
+    options
+  );
 }
 
 /**

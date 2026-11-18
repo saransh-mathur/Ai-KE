@@ -9,13 +9,19 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "db:setup": "tsx scripts/db-setup.ts",
+    "db:push": "drizzle-kit push --config=src/db/drizzle.config.ts",
+    "db:seed": "tsx scripts/db-setup.ts --seed-only",
+    "db:studio": "drizzle-kit studio --config=src/db/drizzle.config.ts"
   },
   "dependencies": {
     "@google/genai": "^3.3.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/d3": "^7.4.3",
     "@types/pg": "^8.23.1",
     "@vitejs/plugin-react": "^6.1.1",
+    "d3": "^7.9.2",
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.11",
     "drizzle-orm": "^0.45.4",

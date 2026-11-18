@@ -34,7 +34,23 @@ export function getGeminiClient(): GoogleGenAI {
  * Formats @google/genai errors into clear, user-actionable messages without leaking secrets.
  */
 export function formatGeminiErrorMessage(error: unknown): { status: number; message: string } {
-  const rawMessage = error instanceof Error ? error.message : String(error || 'Unknown Gemini API error');
+  let rawMessage = error instanceof Error ? error.message : String(error || 'Unknown Gemini API error');
+
+  // Unwrap nested JSON error objects emitted by @google/genai SDK if present
+  try {
+    const jsonMatch = rawMessage.match(/\{[\s\S]*\}$/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed?.error?.message) {
+        rawMessage = String(parsed.error.message);
+      } else if (parsed?.message) {
+        rawMessage = String(parsed.message);
+      }
+    }
+  } catch {
+    // Keep original message if not JSON
+  }
+
   const lower = rawMessage.toLowerCase();
 
   if (lower.includes('not configured') || lower.includes('api key not valid') || lower.includes('api_key_invalid')) {
@@ -59,10 +75,24 @@ export function formatGeminiErrorMessage(error: unknown): { status: number; mess
     };
   }
 
+  if (lower.includes('503') || lower.includes('unavailable') || lower.includes('high demand') || lower.includes('overloaded')) {
+    return {
+      status: 503,
+      message: 'Gemini is temporarily experiencing high demand. Please retry in a moment.',
+    };
+  }
+
+  if (lower.includes('404') || lower.includes('not_found') || lower.includes('not found')) {
+    return {
+      status: 404,
+      message: 'Requested Gemini model was not found or is unsupported for this endpoint.',
+    };
+  }
+
   if (lower.includes('400') || lower.includes('unsupported') || lower.includes('invalid argument')) {
     return {
       status: 400,
-      message: 'Unsupported audio format or invalid request payload. Try recording again or uploading WAV/MP3/WebM audio.',
+      message: 'Invalid Gemini API request parameters or payload.',
     };
   }
 

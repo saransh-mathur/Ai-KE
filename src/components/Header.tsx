@@ -9,7 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext.tsx';
 import { useTheme } from '../context/ThemeContext.tsx';
 
-export type MainNavTab = 'search' | 'database' | 'schema';
+export type MainNavTab = 'search' | 'database' | 'sql' | 'schema';
 
 interface HeaderProps {
   activeTab: MainNavTab;
@@ -19,6 +19,7 @@ interface HeaderProps {
 const NAV_TABS: Array<{ id: MainNavTab; label: string }> = [
   { id: 'search', label: 'Knowledge Search' },
   { id: 'database', label: 'Live Database' },
+  { id: 'sql', label: 'SQL Query' },
   { id: 'schema', label: 'Schema & SQL' },
 ];
 

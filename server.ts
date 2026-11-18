@@ -17,11 +17,20 @@ import {
   getFeedbackStats,
   getAllBusinessUnits,
   seedDemoData,
+  getDatabaseHealth,
+  executePostgresHybridSearch,
+  executeRawSqlQuery,
 } from './src/db/queries.ts';
+import { Type, ThinkingLevel } from '@google/genai';
 import {
   getGeminiClient,
   isGeminiKeyConfigured,
+  formatGeminiErrorMessage,
 } from './src/lib/gemini-client.ts';
+import {
+  buildSqlExplanationPayload,
+  normalizeSqlExplanation,
+} from './src/lib/sql-runner.ts';
 
 dotenv.config();
 
@@ -125,18 +134,222 @@ async function startServer() {
     }
   });
 
-  // Seed idempotent demo data into Cloud SQL
+  // Seed idempotent demo data into Cloud SQL / PostgreSQL
   app.post('/api/seed-demo-data', async (_req, res) => {
     try {
       const counts = await seedDemoData();
       res.status(200).json({
         success: true,
-        message: 'Cloud SQL populated with enterprise demo dataset.',
+        message: 'PostgreSQL populated with enterprise demo dataset.',
         counts,
       });
     } catch (error: any) {
       console.error('Failed to seed demo data:', error);
-      res.status(500).json({ error: error?.message || 'Failed to seed demo data in Cloud SQL' });
+      res.status(500).json({ error: error?.message || 'Failed to seed demo data in PostgreSQL' });
+    }
+  });
+
+  // PostgreSQL end-to-end health, extensions & table inventory
+  app.get('/api/db/health', async (_req, res) => {
+    try {
+      const health = await getDatabaseHealth();
+      res.json(health);
+    } catch (error: any) {
+      res.status(503).json({
+        connected: false,
+        error: error?.message || 'PostgreSQL connection unavailable',
+      });
+    }
+  });
+
+  // End-to-end PostgreSQL hybrid retrieval + RBAC pre-filtering endpoint
+  app.post('/api/hybrid-search', async (req, res) => {
+    try {
+      const { query, region, tier, clearance, kConstant, maxResults } = req.body || {};
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: 'query is required' });
+      }
+
+      const result = await executePostgresHybridSearch({
+        query,
+        overrideRegion: region,
+        overrideTier: tier,
+        userClearance: clearance,
+        kConstant: Number(kConstant) || 60,
+        maxResults: Number(maxResults) || 5,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('PostgreSQL hybrid search endpoint failed:', error);
+      res.status(500).json({ error: error?.message || 'Hybrid search failed' });
+    }
+  });
+
+  // Execute raw read-only SQL query against connected PostgreSQL instance
+  app.post('/api/sql/execute', async (req, res) => {
+    try {
+      const { sql, maxRows } = req.body || {};
+      if (typeof sql !== 'string') {
+        return res.status(400).json({ error: 'sql string is required' });
+      }
+
+      const execution = await executeRawSqlQuery(sql, Math.min(500, Number(maxRows) || 200));
+      res.json({
+        success: true,
+        ...execution,
+      });
+    } catch (error: any) {
+      const status = error?.statusCode === 400 ? 400 : 500;
+      res.status(status).json({
+        success: false,
+        error: error?.message || 'SQL execution failed',
+        pgCode: error?.pgCode,
+        hint: error?.pgHint,
+      });
+    }
+  });
+
+  // Explain SQL query logic & returned PostgreSQL result set using Gemini
+  app.post('/api/sql/explain', async (req, res) => {
+    try {
+      const { sql, columns, rows, totalRows } = req.body || {};
+
+      if (typeof sql !== 'string' || !sql.trim()) {
+        return res.status(400).json({ success: false, error: 'A valid SQL statement is required.' });
+      }
+      if (!Array.isArray(columns) || !Array.isArray(rows)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Result columns and rows arrays are required to generate an explanation.',
+        });
+      }
+
+      if (!isGeminiKeyConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error:
+            'Gemini API key is not configured. Open Settings > Secrets in AI Studio and add a valid GEMINI_API_KEY to enable AI SQL explanations.',
+        });
+      }
+
+      const payload = buildSqlExplanationPayload({
+        sql,
+        columns: columns.map((c) => String(c)),
+        rows,
+        totalRows: typeof totalRows === 'number' ? totalRows : rows.length,
+        maxSampleRows: 25,
+      });
+
+      const ai = getGeminiClient();
+
+      const systemInstruction = `You are a Principal PostgreSQL Database Architect and Data Analyst for an Enterprise IT Asset & Vendor Knowledge Engine.
+Your task is to provide a clear, accurate natural language explanation and data summary of a SQL query and its returned rows.
+Guidelines:
+1. Ground every metric, entity name, severity level, vendor, region, and observation strictly in the provided SQL and sample rows.
+2. For complex queries (multi-table JOINs, CTEs, aggregations, window functions, or JSONB extraction), clearly explain how the tables combine and what each calculated metric means.
+3. Highlight the most important quantitative findings, concentrations, outliers, or zero/null gaps (if any).
+4. Keep prose crisp, executive-ready, and free of filler.`;
+
+      const userPrompt = `Analyze this PostgreSQL query and its returned result set:
+
+SQL Statement:
+${payload.sql}
+
+Detected Complexity: ${payload.complexity.tier} (${payload.complexity.features.length > 0 ? payload.complexity.features.join(', ') : 'Direct projection'})
+Columns (${payload.columns.length}): ${payload.columns.join(', ')}
+Total Returned Rows: ${payload.totalRows}${payload.truncatedForPrompt ? ` (showing first ${payload.sampledRowsCount} rows)` : ''}
+
+Sample Returned Rows (JSON):
+${JSON.stringify(payload.sampleRows, null, 2)}`;
+
+      const generateExplanation = () =>
+        ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: userPrompt,
+          config: {
+            systemInstruction,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                executiveSummary: {
+                  type: Type.STRING,
+                  description:
+                    '2 to 3 crisp sentences summarizing what the returned result set reveals in plain language.',
+                },
+                queryBreakdown: {
+                  type: Type.STRING,
+                  description:
+                    'Clear explanation of how the SQL query works (joins, CTEs, filters, aggregations, JSONB fields, ordering).',
+                },
+                keyInsights: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description:
+                    '3 to 5 specific, data-grounded findings citing exact values, counts, or entities from the sample rows.',
+                },
+                anomaliesOrNextSteps: {
+                  type: Type.STRING,
+                  description:
+                    'Notable outliers, null/zero patterns, SLA risks, or recommended follow-up SQL analyses.',
+                },
+              },
+              required: [
+                'executiveSummary',
+                'queryBreakdown',
+                'keyInsights',
+                'anomaliesOrNextSteps',
+              ],
+            },
+          },
+        });
+
+      const callWithRetry = async () => {
+        let lastErr: unknown;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            return await generateExplanation();
+          } catch (err: any) {
+            lastErr = err;
+            const msg = String(err?.message || '').toLowerCase();
+            const transient = msg.includes('503') || msg.includes('unavailable') || msg.includes('high demand');
+            if (!transient || attempt === 1) throw err;
+            await new Promise((resolve) => setTimeout(resolve, 900 * (attempt + 1)));
+          }
+        }
+        throw lastErr;
+      };
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini explanation request timed out after 20000ms')), 20000)
+      );
+
+      const response = await Promise.race([callWithRetry(), timeoutPromise]);
+
+      const rawText = response.text;
+      if (!rawText) {
+        throw new Error('Gemini returned an empty response.');
+      }
+
+      const explanation = normalizeSqlExplanation(rawText);
+
+      return res.json({
+        success: true,
+        model: 'gemini-4-hydrogen',
+        sampledRowsCount: payload.sampledRowsCount,
+        totalRows: payload.totalRows,
+        complexity: payload.complexity,
+        explanation,
+      });
+    } catch (error: any) {
+      console.error('SQL explanation failed:', error);
+      const formatted = formatGeminiErrorMessage(error);
+      return res.status(formatted.status).json({
+        success: false,
+        error: formatted.message,
+      });
     }
   });
 

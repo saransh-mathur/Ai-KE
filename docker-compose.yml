@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: enterprise-kg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${SQL_DB_NAME:-ai_knowledge_engine}
+      POSTGRES_USER: ${SQL_USER:-postgres}
+      POSTGRES_PASSWORD: ${SQL_PASSWORD:-postgres}
+    ports:
+      - "${SQL_PORT:-5432}:5432"
+    volumes:
+      - enterprise_kg_pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SQL_USER:-postgres} -d ${SQL_DB_NAME:-ai_knowledge_engine}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  enterprise_kg_pgdata:

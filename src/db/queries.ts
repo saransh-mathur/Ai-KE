@@ -1,4 +1,4 @@
-import { db } from './index.ts';
+import { db, pool } from './index.ts';
 import {
   users,
   vendors,
@@ -13,6 +13,23 @@ import {
 } from './schema.ts';
 import { eq, desc, and } from 'drizzle-orm';
 import { buildSeedPayloads } from '../lib/seed-data.ts';
+import {
+  parseNaturalLanguageQuery,
+  executeHybridRetrievalWithDataset,
+} from '../lib/hybrid-search.ts';
+import { validateReadOnlySqlQuery } from '../lib/sql-runner.ts';
+import type {
+  Asset,
+  AssetType,
+  BusinessUnit,
+  ContractStatus,
+  Incident,
+  IncidentSeverity,
+  KnowledgeChunk,
+  SecurityClearanceLevel,
+  Vendor,
+  VendorTier,
+} from '../lib/types.ts';
 
 /**
  * User Registration & Synchronization helper using upsert to avoid race conditions.
@@ -461,5 +478,215 @@ export async function seedDemoData() {
   } catch (error) {
     console.error('Failed to seed demo data into Cloud SQL:', error);
     throw new Error('Failed to seed demo data into Cloud SQL', { cause: error });
+  }
+}
+
+/**
+ * Inspect PostgreSQL server health, pgvector extension status, and table row counts.
+ */
+export async function getDatabaseHealth() {
+  try {
+    const [versionRes, extRes, vendorRows, buRows, assetRows, incidentRows, chunkRows, savedRows] =
+      await Promise.all([
+        pool.query('SELECT current_database() AS db, version() AS pg_version'),
+        pool.query("SELECT extname, extversion FROM pg_extension WHERE extname IN ('vector', 'pg_trgm')"),
+        db.select().from(vendors),
+        db.select().from(businessUnits),
+        db.select().from(assets),
+        db.select().from(incidents),
+        db.select().from(knowledgeChunks),
+        db.select().from(savedQueries),
+      ]);
+
+    const extensions = extRes.rows.map((r) => `${r.extname}@${r.extversion}`);
+
+    return {
+      connected: true,
+      database: versionRes.rows[0]?.db || process.env.SQL_DB_NAME || 'ai_knowledge_engine',
+      postgresVersion: String(versionRes.rows[0]?.pg_version || '').split(',')[0],
+      extensions,
+      pgvectorEnabled: extRes.rows.some((r) => r.extname === 'vector'),
+      counts: {
+        vendors: vendorRows.length,
+        businessUnits: buRows.length,
+        assets: assetRows.length,
+        incidents: incidentRows.length,
+        knowledgeChunks: chunkRows.length,
+        savedQueries: savedRows.length,
+      },
+    };
+  } catch (error) {
+    console.error('Database healthcheck failed:', error);
+    throw new Error('PostgreSQL database healthcheck failed', { cause: error });
+  }
+}
+
+/**
+ * Execute Hybrid Retrieval + RBAC Pre-Filtering directly over live PostgreSQL tables via Drizzle ORM.
+ */
+export async function executePostgresHybridSearch(params: {
+  query: string;
+  overrideRegion?: string;
+  overrideTier?: string;
+  userClearance?: SecurityClearanceLevel;
+  kConstant?: number;
+  maxResults?: number;
+}) {
+  try {
+    const [vendorRows, buRows, assetRows, incidentRows, chunkRows] = await Promise.all([
+      db.select().from(vendors),
+      db.select().from(businessUnits),
+      db.select().from(assets),
+      db.select().from(incidents),
+      db.select().from(knowledgeChunks),
+    ]);
+
+    const mappedVendors: Vendor[] = vendorRows.map((v) => ({
+      id: v.id,
+      name: v.name,
+      tier: (Number(v.tier) || 2) as VendorTier,
+      contract_status: v.contractStatus as ContractStatus,
+      metadata: {
+        category: v.category,
+        account_manager: v.accountManager,
+        sla_percentage: v.slaPercentage,
+        headquarters: v.headquarters,
+      },
+    }));
+
+    const mappedBUs: BusinessUnit[] = buRows.map((bu) => ({
+      id: bu.id,
+      name: bu.name,
+      cost_center: bu.costCenter,
+      lead: bu.leadContact,
+    }));
+
+    const mappedAssets: Asset[] = assetRows.map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type as AssetType,
+      region: a.region,
+      vendor_id: a.vendorId,
+      business_unit_id: a.businessUnitId,
+      criticality: a.criticality as Asset['criticality'],
+      specs: (a.specs || {}) as Asset['specs'],
+    }));
+
+    const mappedIncidents: Incident[] = incidentRows.map((inc) => ({
+      id: inc.id,
+      title: inc.title,
+      severity: inc.severity as IncidentSeverity,
+      root_cause: inc.rootCause,
+      asset_id: inc.assetId,
+      resolved_at: inc.resolvedAt ? inc.resolvedAt.toISOString() : '',
+      downtime_minutes: inc.downtimeMinutes,
+      security_clearance:
+        inc.severity === 'SEV-1'
+          ? 'L3_RESTRICTED'
+          : inc.severity === 'SEV-2'
+            ? 'L2_CONFIDENTIAL'
+            : 'L1_PUBLIC',
+    }));
+
+    const mappedChunks: KnowledgeChunk[] = chunkRows.map((chk) => {
+      const meta = (chk.metadata || {}) as Record<string, any>;
+      const clearance = (meta.security_clearance || 'L1_PUBLIC') as SecurityClearanceLevel;
+      return {
+        id: chk.id,
+        asset_id: chk.assetId,
+        document_title: chk.documentTitle,
+        doc_type: chk.docType as KnowledgeChunk['doc_type'],
+        chunk_index: chk.chunkIndex,
+        chunk_text: chk.chunkText,
+        security_clearance: clearance,
+        metadata: {
+          author: String(meta.author || 'Enterprise Platform'),
+          last_reviewed: String(meta.last_reviewed || new Date().toISOString().slice(0, 10)),
+          tags: Array.isArray(meta.tags) ? meta.tags : [],
+          security_clearance: clearance,
+          source: meta.source,
+          alertId: meta.alertId,
+          ingestionTimestamp: meta.ingestionTimestamp,
+        },
+      };
+    });
+
+    const analysis = parseNaturalLanguageQuery(params.query);
+    const execution = executeHybridRetrievalWithDataset(
+      params.query,
+      analysis,
+      {
+        vendors: mappedVendors,
+        businessUnits: mappedBUs,
+        assets: mappedAssets,
+        incidents: mappedIncidents,
+        knowledgeChunks: mappedChunks,
+      },
+      {
+        applySqlFilters: true,
+        useGraphRank: true,
+        overrideRegion: params.overrideRegion,
+        overrideTier: params.overrideTier,
+        userClearance: params.userClearance || 'L3_RESTRICTED',
+        kConstant: params.kConstant || 60,
+        maxResults: params.maxResults || 5,
+      }
+    );
+
+    return {
+      source: 'postgresql',
+      rowCount: mappedChunks.length,
+      execution,
+    };
+  } catch (error) {
+    console.error('PostgreSQL hybrid search failed:', error);
+    throw new Error('PostgreSQL hybrid search failed', { cause: error });
+  }
+}
+
+/**
+ * Execute a validated read-only raw SQL query against PostgreSQL inside a BEGIN READ ONLY transaction.
+ */
+export async function executeRawSqlQuery(rawSql: string, maxRows: number = 200) {
+  const validation = validateReadOnlySqlQuery(rawSql);
+  if (!validation.valid) {
+    const err = new Error(validation.error || 'Invalid read-only SQL query');
+    (err as any).statusCode = 400;
+    throw err;
+  }
+
+  const client = await pool.connect();
+  const t0 = performance.now();
+
+  try {
+    await client.query('BEGIN READ ONLY');
+    await client.query("SET LOCAL statement_timeout = '8000'");
+    const result = await client.query(validation.normalizedSql);
+    await client.query('COMMIT');
+
+    const elapsedMs = Number((performance.now() - t0).toFixed(2));
+    const columns = result.fields.map((f) => f.name);
+    const totalRows = result.rows.length;
+    const truncated = totalRows > maxRows;
+    const slicedRows = truncated ? result.rows.slice(0, maxRows) : result.rows;
+
+    return {
+      columns,
+      rows: slicedRows,
+      rowCount: slicedRows.length,
+      totalRows,
+      truncated,
+      executionTimeMs: elapsedMs,
+      command: result.command || 'SELECT',
+    };
+  } catch (error: any) {
+    await client.query('ROLLBACK').catch(() => {});
+    const err = new Error(error?.message || 'PostgreSQL query execution failed', { cause: error });
+    (err as any).statusCode = error?.code ? 400 : 500;
+    (err as any).pgCode = error?.code;
+    (err as any).pgHint = error?.hint;
+    throw err;
+  } finally {
+    client.release();
   }
 }

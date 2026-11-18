@@ -57,11 +57,9 @@ This engine solves all three by executing **RBAC + SQL relational pre-filtering*
 ```
 
 ### Feature Modules
-1. **Search Cockpit (`Search`)**: Minimalist AI interface with collapsible Advanced Filters, RBAC security clearance enforcement, Grounded AI Answer with Thumbs Up/Down RLHF reinforcement, and an **"Under the Hood: Retrieval Proof"** accordion showing Multi-Hop Graph Paths, Ranked Vector Chunks, and Executed SQL CTEs.
-2. **Webhooks (`Webhooks`)**: Simulates and persists live PagerDuty, AWS CloudWatch, and Jira incident alerts into PostgreSQL with zero-ETL chunk generation.
-3. **Vision Studio (`Vision Studio`)**: Parses visual architecture diagrams (uploads or presets) into queryable graph nodes, directed edges, and SLA bottleneck warnings.
-4. **Database Explorer (`Database`)**: Live inspector over `vendors`, `assets`, `incidents`, `knowledge_chunks`, and `saved_queries`.
-5. **Architecture & DDL (`Architecture`)**: Interactive 4-layer architecture blueprint, PostgreSQL 16 + `pgvector` DDL, SQLAlchemy 2.0 Async models, Graph Explorer, and downloadable JSON snapshots.
+1. **Knowledge Search (`DeveloperCockpit`)**: Query input + 3 clean filters (`Target Region`, `Vendor Tier`, `Security Clearance`), Grounded AI Answer with RLHF Thumbs Up/Down feedback, and an expandable **Retrieval Trace** featuring an **interactive D3.js multi-hop knowledge graph**, 4-node relationship chain (`Vendor → Asset → Business Unit → Incident`), and matched vector chunk.
+2. **Live Database (`LiveDatabaseExplorer`)**: Live PostgreSQL table inspector over `vendors`, `assets`, `business_units`, `incidents`, `knowledge_chunks`, and `saved_queries` with one-click **Seed Demo Data**.
+3. **Schema & SQL (`SchemaViewer`)**: Reference viewer for `pgvector` HNSW DDL, single-pass RRF SQL queries, SQLAlchemy models, Table Dictionary, and global `Cmd+S` / `Ctrl+S` JSON report export.
 
 ---
 
@@ -69,7 +67,7 @@ This engine solves all three by executing **RBAC + SQL relational pre-filtering*
 
 ### 1. Prerequisites
 - **Node.js 20+** and `npm`
-- **PostgreSQL 15/16+** (with `pgvector` extension if using vector indexes in Postgres)
+- **Docker Desktop** *(recommended — zero manual Postgres install)* **OR** an existing **PostgreSQL 15/16+** instance (local or hosted such as Neon, Supabase, RDS, or Cloud SQL)
 - *(Optional for local AI)* **Ollama** installed locally
 
 ### 2. Clone & Install Dependencies
@@ -79,24 +77,36 @@ cd <your-repo-directory>
 npm install
 ```
 
-### 3. Configure Environment Variables
-Copy the environment template and fill in your credentials:
+### 3. One-Command PostgreSQL Database Setup
+Once the repository is copied, run a single command to bootstrap `.env`, provision/connect PostgreSQL + `pgvector`, create tables/indexes/views, and seed the enterprise dataset:
 ```bash
-cp .env.example .env
+npm run db:setup
 ```
 
-> **Security Note:** Never commit `.env` or `firebase-applet-config.json` to Git. All API keys are loaded strictly server-side in `server.ts`—never exposed in browser code.
+**What `npm run db:setup` automates end-to-end:**
+1. Creates `.env` from `.env.example` if missing.
+2. If no local Postgres is running on `SQL_HOST:SQL_PORT` and Docker is available, automatically starts the `pgvector/pgvector:pg16` container defined in `docker-compose.yml`.
+3. Creates database `ai_knowledge_engine` if it doesn't exist yet.
+4. Runs `db/init.sql` (idempotent tables, foreign keys, B-tree + GIN indexes, `pg_trgm`, `pgvector` + HNSW index when installed, and the `v_enterprise_knowledge_graph` view).
+5. Seeds `vendors`, `business_units`, `assets`, `incidents`, and `knowledge_chunks` idempotently and verifies row counts.
 
-### 4. Push Database Schema & Start
+> **Using an existing remote Postgres (Neon, Supabase, RDS)?** Copy `.env.example` to `.env`, set `SQL_HOST`, `SQL_PORT`, `SQL_USER`, `SQL_PASSWORD`, `SQL_DB_NAME`, and `SQL_SSL="true"`, then run `npm run db:setup`.
+
+> **Security Note:** Never commit `.env` or `firebase-applet-config.json` to Git. All API keys and database credentials are loaded strictly server-side.
+
+### 4. Start the Application
 ```bash
-# Push Drizzle PostgreSQL schema (when DATABASE_URL is configured)
-npx drizzle-kit push
-
-# Start full-stack Express + Vite server on http://localhost:3000
 npm run dev
 ```
+Open `http://localhost:3000`. The **Knowledge Search** (`/api/hybrid-search`) and **Live Database** (`/api/vendors`, `/api/assets`, `/api/incidents`, `/api/knowledge-chunks`) tabs are connected end-to-end to PostgreSQL immediately.
 
-On startup, the backend automatically checks PostgreSQL connectivity and seeds initial master data if tables are empty. If PostgreSQL is unavailable locally, the cockpit still demonstrates hybrid retrieval using seeded in-memory records.
+### Useful Database Commands
+```bash
+npm run db:setup   # Full one-command setup (env + Docker/DB + schema + indexes + seed)
+npm run db:push    # Push Drizzle schema changes (src/db/schema.ts)
+npm run db:seed    # Re-run idempotent enterprise seed data
+npm run db:studio  # Open Drizzle Studio GUI against PostgreSQL
+```
 
 ---
 

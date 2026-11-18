@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Header, MainNavTab } from './components/Header.tsx';
 import { DeveloperCockpit } from './components/DeveloperCockpit.tsx';
 import { LiveDatabaseExplorer } from './components/LiveDatabaseExplorer.tsx';
+import { SqlQueryConsole } from './components/SqlQueryConsole.tsx';
 import { SchemaViewer } from './components/SchemaViewer.tsx';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { ThemeProvider } from './context/ThemeContext.tsx';
@@ -61,6 +62,7 @@ export default function App() {
           <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {activeTab === 'search' && <DeveloperCockpit />}
             {activeTab === 'database' && <LiveDatabaseExplorer />}
+            {activeTab === 'sql' && <SqlQueryConsole />}
             {activeTab === 'schema' && (
               <SchemaViewer onDownloadReport={handleDownloadReport} />
             )}
