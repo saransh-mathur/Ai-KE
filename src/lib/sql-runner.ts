@@ -298,6 +298,13 @@ export function upsertSqlHistory(
   ].slice(0, maxItems);
 }
 
+export function removeSqlHistoryItem(
+  history: SqlHistoryItem[],
+  id: string
+): SqlHistoryItem[] {
+  return history.filter((item) => item.id !== id);
+}
+
 export function filterSqlHistory(
   history: SqlHistoryItem[],
   searchTerm: string

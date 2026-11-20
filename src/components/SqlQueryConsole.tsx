@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
   TerminalSquare,
@@ -15,6 +15,7 @@ import {
   Search,
   MessageSquareText,
   X,
+  Pencil,
 } from 'lucide-react';
 import {
   SQL_QUERY_PRESETS,
@@ -27,6 +28,7 @@ import {
   filterSqlHistory,
   formatRowsAsCsv,
   loadSqlHistory,
+  removeSqlHistoryItem,
   saveSqlHistory,
   upsertSqlHistory,
   validateReadOnlySqlQuery,
@@ -80,75 +82,98 @@ export const SqlQueryConsole: React.FC = () => {
   const [explanationResult, setExplanationResult] = useState<SqlExplainApiResponse | null>(null);
   const [copiedExplanation, setCopiedExplanation] = useState<boolean>(false);
 
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const [editorNotice, setEditorNotice] = useState<string | null>(null);
+
   const [copiedJson, setCopiedJson] = useState<boolean>(false);
   const [sortConfig, setSortConfig] = useState<{
     column: string;
     direction: 'asc' | 'desc';
   } | null>(null);
 
-  const runSql = useCallback(async (queryText: string) => {
-    const preflight = validateReadOnlySqlQuery(queryText);
-    if (!preflight.valid) {
-      setError(preflight.error || 'Invalid SQL query.');
-      return;
-    }
-
-    setExecuting(true);
-    setError(null);
-    setSortConfig(null);
-    setExplanationResult(null);
-    setExplainError(null);
-
-    try {
-      const res = await fetch('/api/sql/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql: queryText, maxRows: 200 }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error || `PostgreSQL error (HTTP ${res.status})`);
+  const runSql = useCallback(
+    async (queryText: string, options?: { recordHistory?: boolean }) => {
+      const preflight = validateReadOnlySqlQuery(queryText);
+      if (!preflight.valid) {
+        setError(preflight.error || 'Invalid SQL query.');
+        return;
       }
 
-      const payload: SqlExecutionResponse = {
-        columns: Array.isArray(data.columns) ? data.columns : [],
-        rows: Array.isArray(data.rows) ? data.rows : [],
-        rowCount: Number(data.rowCount ?? 0),
-        totalRows: Number(data.totalRows ?? 0),
-        truncated: Boolean(data.truncated),
-        executionTimeMs: Number(data.executionTimeMs ?? 0),
-        command: String(data.command || 'SELECT'),
-      };
+      const shouldRecord = options?.recordHistory ?? true;
+      setExecuting(true);
+      setError(null);
+      setEditorNotice(null);
+      setSortConfig(null);
+      setExplanationResult(null);
+      setExplainError(null);
 
-      setResult(payload);
-      setExecutedSql(queryText);
-
-      // Only track successful SQL executions (up to last 10)
-      setHistory((prev) => {
-        const updated = upsertSqlHistory(prev, {
-          sql: queryText,
-          executedAt: new Date().toLocaleTimeString(),
-          rowCount: payload.rowCount,
-          executionTimeMs: payload.executionTimeMs,
+      try {
+        const res = await fetch('/api/sql/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sql: queryText, maxRows: 200 }),
         });
-        if (typeof window !== 'undefined') {
-          saveSqlHistory(window.localStorage, updated);
-        }
-        return updated;
-      });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to execute SQL query';
-      setError(message);
-    } finally {
-      setExecuting(false);
-    }
-  }, []);
 
-  // Automatically execute initial preset on mount so live Postgres rows render immediately
+        const data = await res.json();
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || `PostgreSQL error (HTTP ${res.status})`);
+        }
+
+        const payload: SqlExecutionResponse = {
+          columns: Array.isArray(data.columns) ? data.columns : [],
+          rows: Array.isArray(data.rows) ? data.rows : [],
+          rowCount: Number(data.rowCount ?? 0),
+          totalRows: Number(data.totalRows ?? 0),
+          truncated: Boolean(data.truncated),
+          executionTimeMs: Number(data.executionTimeMs ?? 0),
+          command: String(data.command || 'SELECT'),
+        };
+
+        setResult(payload);
+        setExecutedSql(queryText);
+
+        // Only track successful SQL executions (up to last 10)
+        if (shouldRecord) {
+          setHistory((prev) => {
+            const updated = upsertSqlHistory(prev, {
+              sql: queryText,
+              executedAt: new Date().toLocaleTimeString(),
+              rowCount: payload.rowCount,
+              executionTimeMs: payload.executionTimeMs,
+            });
+            if (typeof window !== 'undefined') {
+              saveSqlHistory(window.localStorage, updated);
+            }
+            return updated;
+          });
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to execute SQL query';
+        setError(message);
+      } finally {
+        setExecuting(false);
+      }
+    },
+    []
+  );
+
+  // Automatically execute initial preset on mount without overwriting existing localStorage history order
   useEffect(() => {
-    runSql(SQL_QUERY_PRESETS[0].sql);
+    const existing = typeof window !== 'undefined' ? loadSqlHistory(window.localStorage) : [];
+    runSql(SQL_QUERY_PRESETS[0].sql, { recordHistory: existing.length === 0 });
   }, [runSql]);
+
+  // Keep localStorage history synchronized across browser tabs
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === SQL_HISTORY_STORAGE_KEY) {
+        setHistory(loadSqlHistory(window.localStorage));
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const filteredHistory = useMemo(() => {
     return filterSqlHistory(history, historyFilter);
@@ -291,6 +316,30 @@ export const SqlQueryConsole: React.FC = () => {
     runSql(query);
   };
 
+  const handleEditHistoryItem = (item: SqlHistoryItem, displayNumber: number) => {
+    setSqlInput(item.sql);
+    setError(null);
+    setEditorNotice(`Loaded query #${displayNumber} into editor for editing`);
+    window.requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (el) {
+        el.focus();
+        const len = item.sql.length;
+        el.setSelectionRange(len, len);
+      }
+    });
+  };
+
+  const handleDeleteHistoryItem = (id: string) => {
+    setHistory((prev) => {
+      const updated = removeSqlHistoryItem(prev, id);
+      if (typeof window !== 'undefined') {
+        saveSqlHistory(window.localStorage, updated);
+      }
+      return updated;
+    });
+  };
+
   const handleClearHistory = () => {
     setHistory([]);
     setHistoryFilter('');
@@ -403,15 +452,29 @@ export const SqlQueryConsole: React.FC = () => {
                 htmlFor="sql-query-editor"
                 className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-slate-700 dark:text-slate-300"
               >
-                <span>Raw SQL Statement</span>
+                <span className="flex items-center gap-2">
+                  <span>Raw SQL Statement</span>
+                  {editorNotice && (
+                    <span
+                      data-testid="sql-editor-notice"
+                      className="text-[11px] font-normal text-indigo-700 dark:text-indigo-400"
+                    >
+                      · {editorNotice}
+                    </span>
+                  )}
+                </span>
                 <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
                   READ ONLY · statement_timeout=8s · max 200 rows
                 </span>
               </label>
               <textarea
+                ref={editorRef}
                 id="sql-query-editor"
                 value={sqlInput}
-                onChange={(e) => setSqlInput(e.target.value)}
+                onChange={(e) => {
+                  setSqlInput(e.target.value);
+                  if (editorNotice) setEditorNotice(null);
+                }}
                 onKeyDown={handleKeyDown}
                 rows={7}
                 spellCheck={false}
@@ -861,7 +924,7 @@ export const SqlQueryConsole: React.FC = () => {
                   <span>Query History</span>
                 </h2>
                 <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums">
-                  Last {SQL_HISTORY_MAX_ITEMS} successful queries · {history.length} saved
+                  Saved locally · Last {SQL_HISTORY_MAX_ITEMS} queries · {history.length} saved
                 </p>
               </div>
 
@@ -871,7 +934,7 @@ export const SqlQueryConsole: React.FC = () => {
                   type="button"
                   onClick={handleClearHistory}
                   title="Clear saved query history"
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors whitespace-nowrap"
                 >
                   <Trash2 className="w-3 h-3" />
                   <span>Clear</span>
@@ -904,39 +967,77 @@ export const SqlQueryConsole: React.FC = () => {
               </div>
             ) : (
               <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-0.5">
-                {filteredHistory.map((item, idx) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    data-testid="sql-history-item"
-                    onClick={() => {
-                      setSqlInput(item.sql);
-                      setViewMode('table');
-                      runSql(item.sql);
-                    }}
-                    className="w-full text-left p-3 rounded-xl bg-slate-50 dark:bg-slate-950 hover:bg-indigo-50/70 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors space-y-2 group"
-                  >
-                    <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">
-                      <span>
-                        #{idx + 1} · {item.executedAt}
-                      </span>
-                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                        {item.rowCount} rows · {item.executionTimeMs.toFixed(1)} ms
-                      </span>
-                    </div>
+                {filteredHistory.map((item, idx) => {
+                  const isLoadedInEditor = item.sql.trim() === sqlInput.trim();
+                  return (
+                    <div
+                      key={item.id}
+                      data-testid="sql-history-item"
+                      className={`w-full text-left p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border transition-colors space-y-2.5 ${
+                        isLoadedInEditor
+                          ? 'border-indigo-400 dark:border-indigo-600/80'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                        <span>
+                          #{idx + 1} · {item.executedAt}
+                        </span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                          {item.rowCount} rows · {item.executionTimeMs.toFixed(1)} ms
+                        </span>
+                      </div>
 
-                    <p className="text-[11px] font-mono text-slate-800 dark:text-slate-200 break-words line-clamp-2 leading-relaxed overflow-hidden">
-                      {item.sql.replace(/\s+/g, ' ').trim()}
-                    </p>
+                      <p
+                        title={item.sql}
+                        className="text-[11px] font-mono text-slate-800 dark:text-slate-200 break-words line-clamp-2 leading-relaxed overflow-hidden"
+                      >
+                        {item.sql.replace(/\s+/g, ' ').trim()}
+                      </p>
 
-                    <div className="flex items-center justify-end text-[11px] font-medium text-indigo-700 dark:text-indigo-400 opacity-80 group-hover:opacity-100">
-                      <span className="inline-flex items-center gap-1">
-                        <Play className="w-3 h-3 fill-current" />
-                        Re-run query
-                      </span>
+                      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/80 dark:border-slate-800/80">
+                        <button
+                          type="button"
+                          data-testid="sql-history-delete-btn"
+                          aria-label={`Remove query #${idx + 1} from history`}
+                          title="Remove from history"
+                          onClick={() => handleDeleteHistoryItem(item.id)}
+                          className="p-1 rounded-md text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            data-testid="sql-history-edit-btn"
+                            aria-label={`Edit query #${idx + 1} in editor`}
+                            onClick={() => handleEditHistoryItem(item, idx + 1)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors whitespace-nowrap"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            data-testid="sql-history-rerun-btn"
+                            aria-label={`Re-run query #${idx + 1}`}
+                            onClick={() => {
+                              setSqlInput(item.sql);
+                              setViewMode('table');
+                              runSql(item.sql);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 transition-colors whitespace-nowrap"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Re-run</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </aside>

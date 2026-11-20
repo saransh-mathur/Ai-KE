@@ -5,6 +5,7 @@ import {
   formatRowsAsCsv,
   detectChartableMetrics,
   upsertSqlHistory,
+  removeSqlHistoryItem,
   filterSqlHistory,
   loadSqlHistory,
   saveSqlHistory,
@@ -122,6 +123,12 @@ test('filterSqlHistory and storage helpers filter and persist up to 10 history e
   const filtered = filterSqlHistory(loaded, 'vendors');
   assert.equal(filtered.length, 1);
   assert.equal(filtered[0].sql, 'SELECT * FROM vendors');
+
+  const afterRemove = removeSqlHistoryItem(loaded, loaded[0].id);
+  assert.equal(afterRemove.length, 1);
+  assert.equal(afterRemove[0].sql, 'SELECT * FROM vendors');
+  saveSqlHistory(mockStorage, afterRemove);
+  assert.equal(loadSqlHistory(mockStorage).length, 1);
 });
 
 test('analyzeSqlComplexity detects joins, CTEs, aggregations, and JSONB traversal accurately', () => {
