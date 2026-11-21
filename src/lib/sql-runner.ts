@@ -244,6 +244,55 @@ export function formatRowsAsCsv(
 }
 
 /**
+ * Formats query result columns & rows into pretty-printed JSON with deterministic column ordering.
+ */
+export function formatRowsAsJson(
+  columns: string[],
+  rows: Array<Record<string, unknown>>,
+  pretty = true
+): string {
+  const orderedRows = rows.map((row) => {
+    const ordered: Record<string, unknown> = {};
+    for (const col of columns) {
+      ordered[col] = row[col] === undefined ? null : row[col];
+    }
+    return ordered;
+  });
+
+  return JSON.stringify(orderedRows, null, pretty ? 2 : undefined);
+}
+
+/**
+ * Builds a clean, descriptive download filename derived from the SQL query's primary table and timestamp.
+ */
+export function buildSqlExportFilename(
+  sql: string,
+  format: 'csv' | 'json',
+  now: Date = new Date()
+): string {
+  const stripped = stripCommentsAndLiterals(sql || '');
+  const fromMatch = stripped.match(/\bFROM\s+(?:[a-zA-Z0-9_"]+\.)?"?([a-zA-Z0-9_]+)"?/i);
+  const rawSlug = fromMatch?.[1] || 'query-results';
+  const safeSlug = rawSlug
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'query-results';
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    '-',
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join('');
+
+  return `postgres-${safeSlug}-${stamp}.${format}`;
+}
+
+/**
  * Finds the first numeric column suitable for quick bar-chart visualization of query results.
  */
 export function detectChartableMetrics(

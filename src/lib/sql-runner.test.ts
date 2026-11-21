@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   validateReadOnlySqlQuery,
   formatRowsAsCsv,
+  formatRowsAsJson,
+  buildSqlExportFilename,
   detectChartableMetrics,
   upsertSqlHistory,
   removeSqlHistoryItem,
@@ -64,6 +66,38 @@ test('formatRowsAsCsv escapes commas, quotes, and JSON objects cleanly', () => {
   assert.equal(lines[0], 'id,name,meta');
   assert.equal(lines[1], 'ven-001,"Snowflake, Inc.","{""tier"":1}"');
   assert.equal(lines[2], 'ven-002,"AWS ""Cloud""",');
+});
+
+test('formatRowsAsJson preserves column order, nulls, and JSONB objects cleanly', () => {
+  const json = formatRowsAsJson(
+    ['id', 'name', 'specs'],
+    [
+      { specs: { cores: 64 }, name: 'aurora-pg', id: 'ast-01' },
+      { id: 'ast-02', name: 'srv-alpha' },
+    ]
+  );
+
+  const parsed = JSON.parse(json);
+  assert.equal(parsed.length, 2);
+  assert.deepEqual(Object.keys(parsed[0]), ['id', 'name', 'specs']);
+  assert.deepEqual(parsed[0].specs, { cores: 64 });
+  assert.equal(parsed[1].specs, null);
+});
+
+test('buildSqlExportFilename extracts table name and formats deterministic csv/json filenames', () => {
+  const fixedDate = new Date(2026, 10, 19, 9, 5, 3);
+  assert.equal(
+    buildSqlExportFilename('SELECT * FROM public.vendors ORDER BY tier;', 'csv', fixedDate),
+    'postgres-vendors-20261119-090503.csv'
+  );
+  assert.equal(
+    buildSqlExportFilename('SELECT a.name FROM assets a JOIN vendors v ON a.vendor_id = v.id;', 'json', fixedDate),
+    'postgres-assets-20261119-090503.json'
+  );
+  assert.equal(
+    buildSqlExportFilename('VALUES (1, 2);', 'json', fixedDate),
+    'postgres-query-results-20261119-090503.json'
+  );
 });
 
 test('detectChartableMetrics identifies categorical label and numeric metric columns', () => {

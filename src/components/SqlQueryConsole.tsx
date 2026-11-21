@@ -27,6 +27,8 @@ import {
   detectChartableMetrics,
   filterSqlHistory,
   formatRowsAsCsv,
+  formatRowsAsJson,
+  buildSqlExportFilename,
   loadSqlHistory,
   removeSqlHistoryItem,
   saveSqlHistory,
@@ -86,6 +88,7 @@ export const SqlQueryConsole: React.FC = () => {
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
 
   const [copiedJson, setCopiedJson] = useState<boolean>(false);
+  const [exportedFormat, setExportedFormat] = useState<'csv' | 'json' | null>(null);
   const [sortConfig, setSortConfig] = useState<{
     column: string;
     direction: 'asc' | 'desc';
@@ -270,23 +273,40 @@ export const SqlQueryConsole: React.FC = () => {
     });
   };
 
-  const handleDownloadCsv = () => {
-    if (!result) return;
-    const csv = formatRowsAsCsv(result.columns, sortedRows);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const triggerFileDownload = (content: string, mimeType: string, filename: string) => {
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `postgres-query-results-${Date.now()}.csv`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 100);
+  };
+
+  const handleDownloadCsv = () => {
+    if (!result || sortedRows.length === 0) return;
+    const csv = formatRowsAsCsv(result.columns, sortedRows);
+    const filename = buildSqlExportFilename(executedSql, 'csv');
+    triggerFileDownload(csv, 'text/csv;charset=utf-8;', filename);
+    setExportedFormat('csv');
+    window.setTimeout(() => setExportedFormat((curr) => (curr === 'csv' ? null : curr)), 2000);
+  };
+
+  const handleDownloadJson = () => {
+    if (!result || sortedRows.length === 0) return;
+    const json = formatRowsAsJson(result.columns, sortedRows, true);
+    const filename = buildSqlExportFilename(executedSql, 'json');
+    triggerFileDownload(json, 'application/json;charset=utf-8;', filename);
+    setExportedFormat('json');
+    window.setTimeout(() => setExportedFormat((curr) => (curr === 'json' ? null : curr)), 2000);
   };
 
   const handleCopyJson = () => {
-    if (!result) return;
-    navigator.clipboard.writeText(JSON.stringify(sortedRows, null, 2));
+    if (!result || sortedRows.length === 0) return;
+    const json = formatRowsAsJson(result.columns, sortedRows, true);
+    navigator.clipboard.writeText(json);
     setCopiedJson(true);
     window.setTimeout(() => setCopiedJson(false), 2000);
   };
@@ -755,10 +775,33 @@ export const SqlQueryConsole: React.FC = () => {
                     type="button"
                     onClick={handleDownloadCsv}
                     disabled={sortedRows.length === 0}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-40 whitespace-nowrap"
+                    aria-label="Export results as CSV file"
+                    title="Download result set as CSV file"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-40 whitespace-nowrap shrink-0 transition-colors"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>CSV</span>
+                    {exportedFormat === 'csv' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>{exportedFormat === 'csv' ? 'Exported CSV' : 'Export CSV'}</span>
+                  </button>
+
+                  <button
+                    id="sql-export-json-btn"
+                    type="button"
+                    onClick={handleDownloadJson}
+                    disabled={sortedRows.length === 0}
+                    aria-label="Export results as JSON file"
+                    title="Download result set as JSON file"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-40 whitespace-nowrap shrink-0 transition-colors"
+                  >
+                    {exportedFormat === 'json' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>{exportedFormat === 'json' ? 'Exported JSON' : 'Export JSON'}</span>
                   </button>
 
                   <button
@@ -766,14 +809,15 @@ export const SqlQueryConsole: React.FC = () => {
                     type="button"
                     onClick={handleCopyJson}
                     disabled={sortedRows.length === 0}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-40 whitespace-nowrap"
+                    aria-label="Copy results as JSON"
+                    title="Copy JSON to clipboard"
+                    className="flex items-center justify-center p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-40 shrink-0 transition-colors"
                   >
                     {copiedJson ? (
                       <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
-                    <span>{copiedJson ? 'Copied' : 'JSON'}</span>
                   </button>
                 </div>
               </div>
