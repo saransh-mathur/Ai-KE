@@ -5,7 +5,6 @@ import {
   ChevronUp,
   Copy,
   Check,
-  ArrowRight,
   ShieldAlert,
   CheckCircle2,
   ThumbsUp,
@@ -28,6 +27,7 @@ import {
 } from '../lib/types.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { KnowledgeGraphD3 } from './KnowledgeGraphD3.tsx';
+import { parseGroundedAnswerBlocks } from '../lib/ui-formatters.ts';
 
 const QUICK_PROMPTS = [
   {
@@ -133,6 +133,7 @@ The top-ranked asset is "${topResult.asset.name}" supplied by ${topResult.vendor
   }, [results, topResult, queryInput]);
 
   const displayAnswer = aiAnswerText || fallbackGroundedAnswer;
+  const answerBlocks = useMemo(() => parseGroundedAnswerBlocks(displayAnswer), [displayAnswer]);
 
   const handleRunSearch = async () => {
     setIsSearching(true);
@@ -567,9 +568,45 @@ ${r.chunk.chunk_text}`
 
             <div
               data-testid="ai-answer-body"
-              className="text-sm sm:text-base text-slate-800 dark:text-slate-100 leading-relaxed whitespace-pre-line"
+              className="space-y-3 text-sm sm:text-[15px] text-slate-800 dark:text-slate-100 leading-relaxed"
             >
-              {displayAnswer}
+              {(() => {
+                const paragraphs = answerBlocks.filter((b) => b.kind === 'paragraph');
+                const bullets = answerBlocks.filter((b) => b.kind === 'bullet');
+                return (
+                  <>
+                    {paragraphs.map((block, idx) => (
+                      <p key={`p-${idx}`} className="text-slate-900 dark:text-slate-100">
+                        {block.text}
+                      </p>
+                    ))}
+                    {bullets.length > 0 && (
+                      <ul className="space-y-2.5 pt-1 text-sm text-slate-700 dark:text-slate-200">
+                        {bullets.map((item, idx) => (
+                          <li key={`b-${idx}`} className="flex items-start gap-2.5 leading-relaxed">
+                            <span
+                              aria-hidden="true"
+                              className="mt-2 w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 shrink-0"
+                            />
+                            <span>
+                              {item.kind === 'bullet' && item.label ? (
+                                <>
+                                  <strong className="font-semibold text-slate-900 dark:text-white">
+                                    {item.label}:
+                                  </strong>{' '}
+                                  {item.text}
+                                </>
+                              ) : (
+                                item.text
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {topResult && (
@@ -623,78 +660,83 @@ ${r.chunk.chunk_text}`
             {showProofDrawer && (
               <div
                 id="retrieval-proof-drawer-content"
-                className="p-5 sm:p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 space-y-6"
+                className="px-5 sm:px-6 py-5 border-t border-slate-200 dark:border-slate-800 space-y-6"
               >
                 {topResult ? (
                   <>
-                    {/* 1. 4-Node Visual Chain: Vendor -> Asset -> BU -> Incident */}
+                    {/* 1. 4-Node Visual Chain: 2x2 Responsive Grid (zero clipping) */}
                     <div className="space-y-3">
                       <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                         4-Node Relationship Chain (Vendor → Asset → Business Unit → Incident)
                       </h3>
 
-                      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
+                      <div
+                        data-testid="four-node-chain-grid"
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-1"
+                      >
                         {/* Node 1: Vendor */}
-                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                          <div className="text-[11px] font-mono text-indigo-700 dark:text-indigo-400 font-semibold whitespace-nowrap">
-                            1. Vendor
+                        <div className="min-w-0 pb-3 border-b border-slate-200/80 dark:border-slate-800/80">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
+                            <span className="text-indigo-700 dark:text-indigo-400 font-semibold whitespace-nowrap">
+                              01. Vendor
+                            </span>
+                            <span className="text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                              Tier {topResult.vendor.tier} · {topResult.vendor.contract_status}
+                            </span>
                           </div>
-                          <div className="text-xs font-semibold text-slate-900 dark:text-white mt-0.5 truncate" title={topResult.vendor.name}>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white mt-1 leading-snug">
                             {topResult.vendor.name}
                           </div>
-                          <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums truncate">
-                            Tier {topResult.vendor.tier} · {topResult.vendor.contract_status}
-                          </div>
                         </div>
-
-                        <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 self-center rotate-90 md:rotate-0" />
 
                         {/* Node 2: Asset */}
-                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                          <div className="text-[11px] font-mono text-sky-700 dark:text-sky-400 font-semibold whitespace-nowrap">
-                            2. Asset
+                        <div className="min-w-0 pb-3 border-b border-slate-200/80 dark:border-slate-800/80">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
+                            <span className="text-sky-700 dark:text-sky-400 font-semibold whitespace-nowrap">
+                              02. Asset
+                            </span>
+                            <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {topResult.asset.type} · {topResult.asset.region}
+                            </span>
                           </div>
-                          <div className="text-xs font-semibold text-slate-900 dark:text-white mt-0.5 truncate" title={topResult.asset.name}>
+                          <div className="text-sm font-semibold font-mono text-slate-900 dark:text-white mt-1 leading-snug break-all">
                             {topResult.asset.name}
                           </div>
-                          <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 truncate">
-                            {topResult.asset.type} · {topResult.asset.region}
-                          </div>
                         </div>
 
-                        <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 self-center rotate-90 md:rotate-0" />
-
-                        {/* Node 3: BU */}
-                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                          <div className="text-[11px] font-mono text-amber-700 dark:text-amber-400 font-semibold whitespace-nowrap">
-                            3. Business Unit
+                        {/* Node 3: Business Unit */}
+                        <div className="min-w-0 pb-1">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
+                            <span className="text-amber-700 dark:text-amber-400 font-semibold whitespace-nowrap">
+                              03. Business Unit
+                            </span>
+                            <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {topResult.businessUnit.cost_center}
+                            </span>
                           </div>
-                          <div className="text-xs font-semibold text-slate-900 dark:text-white mt-0.5 truncate" title={topResult.businessUnit.name}>
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white mt-1 leading-snug">
                             {topResult.businessUnit.name}
                           </div>
-                          <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 font-mono truncate">
-                            {topResult.businessUnit.cost_center}
-                          </div>
                         </div>
 
-                        <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 self-center rotate-90 md:rotate-0" />
-
                         {/* Node 4: Incident */}
-                        <div className="flex-1 min-w-0 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                          <div className="text-[11px] font-mono text-rose-700 dark:text-rose-400 font-semibold whitespace-nowrap">
-                            4. Incident
+                        <div className="min-w-0 pb-1">
+                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
+                            <span className="text-rose-700 dark:text-rose-400 font-semibold whitespace-nowrap">
+                              04. Incident
+                            </span>
+                            {topResult.incident && (
+                              <span className="text-rose-700 dark:text-rose-400 font-semibold tabular-nums whitespace-nowrap">
+                                {topResult.incident.severity} · {topResult.incident.downtime_minutes}m
+                              </span>
+                            )}
                           </div>
                           {topResult.incident ? (
-                            <>
-                              <div className="text-xs font-semibold text-rose-700 dark:text-rose-300 mt-0.5 truncate" title={topResult.incident.title}>
-                                {topResult.incident.title}
-                              </div>
-                              <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums truncate">
-                                {topResult.incident.severity} · {topResult.incident.downtime_minutes}m
-                              </div>
-                            </>
+                            <div className="text-sm font-semibold text-slate-900 dark:text-white mt-1 leading-snug">
+                              {topResult.incident.title}
+                            </div>
                           ) : (
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                               No active incidents
                             </div>
                           )}
@@ -703,7 +745,7 @@ ${r.chunk.chunk_text}`
                     </div>
 
                     {/* 2. Interactive D3.js Multi-Hop Knowledge Graph */}
-                    <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    <div className="space-y-3 pt-5 border-t border-slate-200 dark:border-slate-800">
                       <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                         Multi-Hop Knowledge Graph Traversal (D3.js)
                       </h3>
@@ -713,8 +755,8 @@ ${r.chunk.chunk_text}`
                       />
                     </div>
 
-                    {/* 3. Matched Text Chunk */}
-                    <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                    {/* 3. Matched Text Chunk (flat hairline layout — no nested card border) */}
+                    <div className="space-y-3 pt-5 border-t border-slate-200 dark:border-slate-800">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                           Matched Vector Chunk
@@ -726,7 +768,7 @@ ${r.chunk.chunk_text}`
                         </div>
                       </div>
 
-                      <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                      <div className="pt-1 space-y-2">
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span className="font-mono font-semibold text-slate-900 dark:text-white">
                             {topResult.chunk.document_title}
@@ -742,8 +784,8 @@ ${r.chunk.chunk_text}`
 
                       {/* Additional matched chunks summary if any */}
                       {results.length > 1 && (
-                        <div className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                          <Database className="w-3.5 h-3.5 text-slate-400" />
+                        <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800/70 text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                          <Database className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           <span>
                             Also matched: {results.slice(1).map((r) => r.chunk.document_title).join(' · ')}
                           </span>

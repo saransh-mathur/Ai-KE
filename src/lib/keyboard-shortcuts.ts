@@ -16,3 +16,12 @@ export function isSaveReportShortcut(event: ShortcutKeyEventLike): boolean {
   const hasDisallowedModifier = Boolean(event.altKey || event.shiftKey);
   return isSKey && hasPrimaryModifier && !hasDisallowedModifier;
 }
+
+/**
+ * Matches standalone '?' shortcut when no Cmd/Ctrl/Alt modifiers are held.
+ */
+export function isShortcutsHelpKey(event: ShortcutKeyEventLike): boolean {
+  if (!event || typeof event.key !== 'string') return false;
+  return event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey;
+}
+

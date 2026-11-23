@@ -1,18 +1,40 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Database, Copy, Check, Download, Layers, GitMerge } from 'lucide-react';
 import {
   PRODUCTION_SQL_DDL,
   PRODUCTION_RETRIEVAL_SQL,
   PRODUCTION_SQLALCHEMY_MODELS,
 } from '../lib/architecture-data.ts';
+import { extractCodeSectionAnchors } from '../lib/ui-formatters.ts';
+import { SyntaxCodeBlock } from './SyntaxCodeBlock.tsx';
 
 interface SchemaViewerProps {
   onDownloadReport?: () => void;
 }
 
+const SCHEMA_TABS: Array<{ id: 'ddl' | 'rrf' | 'orm' | 'tables'; label: string }> = [
+  { id: 'ddl', label: 'pgvector HNSW DDL' },
+  { id: 'rrf', label: 'RRF Hybrid SQL Query' },
+  { id: 'orm', label: 'SQLAlchemy Models' },
+  { id: 'tables', label: 'Table Dictionary' },
+];
+
 export const SchemaViewer: React.FC<SchemaViewerProps> = ({ onDownloadReport }) => {
   const [subTab, setSubTab] = useState<'ddl' | 'rrf' | 'orm' | 'tables'>('ddl');
   const [copied, setCopied] = useState<string | null>(null);
+
+  const ddlAnchors = useMemo(
+    () => extractCodeSectionAnchors(PRODUCTION_SQL_DDL, 'ddl'),
+    []
+  );
+  const rrfAnchors = useMemo(
+    () => extractCodeSectionAnchors(PRODUCTION_RETRIEVAL_SQL, 'rrf'),
+    []
+  );
+  const ormAnchors = useMemo(
+    () => extractCodeSectionAnchors(PRODUCTION_SQLALCHEMY_MODELS, 'orm'),
+    []
+  );
 
   const getActiveCode = () => {
     if (subTab === 'rrf') return PRODUCTION_RETRIEVAL_SQL;
@@ -28,30 +50,27 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ onDownloadReport }) 
 
   return (
     <div className="space-y-6">
-      {/* Header & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs">
+      {/* Unified Unboxed Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Database className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Schema &amp; Hybrid RRF SQL Reference
-            </h1>
-          </div>
-          <p className="text-xs text-slate-600 dark:text-slate-400">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Schema &amp; Hybrid RRF SQL Reference
+          </h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             Production PostgreSQL 16 + pgvector HNSW DDL and single-pass Reciprocal Rank Fusion (RRF) CTE retrieval query.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {subTab !== 'tables' && (
             <button
               id="copy-schema-sql-btn"
               type="button"
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-colors whitespace-nowrap shrink-0"
             >
               {copied === subTab ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied === subTab ? 'Copied!' : 'Copy SQL'}</span>
+              <span>{copied === subTab ? 'Copied!' : subTab === 'orm' ? 'Copy Python' : 'Copy SQL'}</span>
             </button>
           )}
 
@@ -61,7 +80,7 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ onDownloadReport }) 
               type="button"
               onClick={onDownloadReport}
               title="Download Schema JSON snapshot (Cmd+S / Ctrl+S)"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0 shadow-xs"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export JSON</span>
@@ -73,66 +92,43 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ onDownloadReport }) 
         </div>
       </div>
 
-      {/* Reference Sub-Tabs */}
-      <div className="flex flex-wrap bg-white dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium gap-1 w-fit">
-        <button
-          type="button"
-          onClick={() => setSubTab('ddl')}
-          className={`px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
-            subTab === 'ddl'
-              ? 'bg-indigo-600 text-white font-semibold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          pgvector HNSW DDL
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('rrf')}
-          className={`px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
-            subTab === 'rrf'
-              ? 'bg-indigo-600 text-white font-semibold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          RRF Hybrid SQL Query
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('orm')}
-          className={`px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
-            subTab === 'orm'
-              ? 'bg-indigo-600 text-white font-semibold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          SQLAlchemy Models
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('tables')}
-          className={`px-3.5 py-2 rounded-lg transition-colors whitespace-nowrap ${
-            subTab === 'tables'
-              ? 'bg-indigo-600 text-white font-semibold'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          Table Dictionary
-        </button>
+      {/* Clean Underlined Reference Sub-Tabs */}
+      <div
+        role="tablist"
+        aria-label="Schema reference sections"
+        className="flex items-center gap-6 border-b border-slate-200 dark:border-slate-800 overflow-x-auto"
+      >
+        {SCHEMA_TABS.map((tab) => {
+          const isActive = subTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setSubTab(tab.id)}
+              className={`pb-3 pt-1 text-xs font-medium border-b-2 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                isActive
+                  ? 'border-indigo-600 dark:border-indigo-400 text-indigo-700 dark:text-white font-semibold'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab 1: pgvector HNSW DDL */}
       {subTab === 'ddl' && (
         <div className="space-y-4">
-          <div className="bg-slate-900 dark:bg-slate-950 border border-slate-800 rounded-2xl p-5 overflow-hidden shadow-md">
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-xs text-slate-400">
-              <span className="font-mono text-indigo-400">schema_enterprise_kg.sql</span>
-              <span className="font-mono text-slate-500">PostgreSQL 16 + pgvector 0.7.0</span>
-            </div>
-            <pre className="text-xs font-mono text-slate-100 dark:text-slate-300 overflow-x-auto p-2 leading-relaxed">
-              <code>{PRODUCTION_SQL_DDL}</code>
-            </pre>
-          </div>
+          <SyntaxCodeBlock
+            code={PRODUCTION_SQL_DDL}
+            language="sql"
+            filename="schema_enterprise_kg.sql"
+            subtitle="PostgreSQL 16 + pgvector 0.7.0"
+            anchors={ddlAnchors}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800">
@@ -173,15 +169,13 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ onDownloadReport }) 
       {/* Tab 2: RRF Hybrid SQL Query */}
       {subTab === 'rrf' && (
         <div className="space-y-4">
-          <div className="bg-slate-900 dark:bg-slate-950 border border-slate-800 rounded-2xl p-5 overflow-hidden shadow-md">
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-xs text-slate-400">
-              <span className="font-mono text-emerald-400">sql/hybrid_retrieval_rrf.sql</span>
-              <span className="font-mono text-slate-500">Single-Pass CTE · HNSW &lt;=&gt; + RRF (k=60)</span>
-            </div>
-            <pre className="text-xs font-mono text-slate-100 dark:text-slate-300 overflow-x-auto p-2 leading-relaxed">
-              <code>{PRODUCTION_RETRIEVAL_SQL}</code>
-            </pre>
-          </div>
+          <SyntaxCodeBlock
+            code={PRODUCTION_RETRIEVAL_SQL}
+            language="sql"
+            filename="sql/hybrid_retrieval_rrf.sql"
+            subtitle="Single-Pass CTE · HNSW <=> + RRF (k=60)"
+            anchors={rrfAnchors}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
             <div className="p-4 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800">
@@ -214,15 +208,13 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ onDownloadReport }) 
 
       {/* Tab 3: SQLAlchemy Models */}
       {subTab === 'orm' && (
-        <div className="bg-slate-900 dark:bg-slate-950 border border-slate-800 rounded-2xl p-5 overflow-hidden shadow-md">
-          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800 text-xs text-slate-400">
-            <span className="font-mono text-emerald-400">models/enterprise_models.py</span>
-            <span className="font-mono text-slate-500">SQLAlchemy 2.0 Async / pgvector</span>
-          </div>
-          <pre className="text-xs font-mono text-slate-100 dark:text-slate-300 overflow-x-auto p-2 leading-relaxed">
-            <code>{PRODUCTION_SQLALCHEMY_MODELS}</code>
-          </pre>
-        </div>
+        <SyntaxCodeBlock
+          code={PRODUCTION_SQLALCHEMY_MODELS}
+          language="python"
+          filename="models/enterprise_models.py"
+          subtitle="SQLAlchemy 2.0 Async / pgvector"
+          anchors={ormAnchors}
+        />
       )}
 
       {/* Tab 4: Table Dictionary */}

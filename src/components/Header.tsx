@@ -5,6 +5,7 @@ import {
   LogOut,
   Sun,
   Moon,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { useTheme } from '../context/ThemeContext.tsx';
@@ -14,6 +15,7 @@ export type MainNavTab = 'search' | 'database' | 'sql' | 'schema';
 interface HeaderProps {
   activeTab: MainNavTab;
   setActiveTab: (tab: MainNavTab) => void;
+  onOpenShortcuts?: () => void;
 }
 
 const NAV_TABS: Array<{ id: MainNavTab; label: string }> = [
@@ -23,7 +25,7 @@ const NAV_TABS: Array<{ id: MainNavTab; label: string }> = [
   { id: 'schema', label: 'Schema & SQL' },
 ];
 
-export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
+export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, onOpenShortcuts }) => {
   const { user, dbUser, signInWithGoogle, signOutUser, loading } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
@@ -45,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             </span>
           </button>
 
-          {/* Zone 2: 3 Clean Single-Line Navigation Tabs */}
+          {/* Zone 2: Clean Single-Line Navigation Tabs */}
           <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-6 text-sm font-medium">
             {NAV_TABS.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -67,26 +69,33 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             })}
           </nav>
 
-          {/* Zone 3: Theme Toggle & Account Action */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* Zone 3: Compact Utility Icons & Primary Account CTA */}
+          <div className="flex items-center gap-2 shrink-0">
+            {onOpenShortcuts && (
+              <button
+                id="shortcuts-help-btn"
+                type="button"
+                onClick={onOpenShortcuts}
+                aria-label="Keyboard shortcuts"
+                title="Keyboard shortcuts (?)"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
+            )}
+
             <button
               id="theme-toggle-btn"
               type="button"
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 transition-colors whitespace-nowrap shrink-0"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
             >
               {theme === 'dark' ? (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Light</span>
-                </>
+                <Sun className="w-4 h-4 text-amber-400" />
               ) : (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-indigo-600" />
-                  <span className="hidden sm:inline">Dark</span>
-                </>
+                <Moon className="w-4 h-4 text-indigo-600" />
               )}
             </button>
 
@@ -123,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
               <button
                 type="button"
                 onClick={signInWithGoogle}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0 shadow-xs"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>Sign In</span>

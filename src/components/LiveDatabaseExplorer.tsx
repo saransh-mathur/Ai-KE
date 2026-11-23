@@ -1,5 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Database, RefreshCw, AlertCircle, CheckCircle2, Sprout } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+  Sprout,
+  Search,
+  Braces,
+  Copy,
+  Check,
+  X,
+} from 'lucide-react';
+import { filterTableRecords } from '../lib/ui-formatters.ts';
 
 type TableKey = 'vendors' | 'assets' | 'businessUnits' | 'incidents' | 'chunks' | 'savedQueries';
 
@@ -12,6 +23,13 @@ const TABLE_CONFIG: Record<TableKey, { label: string; sqlName: string; endpoint:
   savedQueries: { label: 'saved_queries', sqlName: 'saved_queries', endpoint: '/api/saved-queries' },
 };
 
+interface SelectedJsonbField {
+  table: string;
+  rowLabel: string;
+  column: string;
+  value: unknown;
+}
+
 export const LiveDatabaseExplorer: React.FC = () => {
   const [activeTable, setActiveTable] = useState<TableKey>('vendors');
   const [data, setData] = useState<Record<string, unknown>[]>([]);
@@ -20,12 +38,14 @@ export const LiveDatabaseExplorer: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [seedMessage, setSeedMessage] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedJsonb, setSelectedJsonb] = useState<SelectedJsonbField | null>(null);
+  const [copiedJsonb, setCopiedJsonb] = useState<boolean>(false);
 
   const requestSeqRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchTableData = useCallback(async (table: TableKey) => {
-    // Cancel any in-flight request so stale responses never leave spinner spinning or overwrite newer state
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -40,6 +60,7 @@ export const LiveDatabaseExplorer: React.FC = () => {
 
     setLoading(true);
     setError(null);
+    setSelectedJsonb(null);
 
     try {
       const endpoint = TABLE_CONFIG[table].endpoint;
@@ -64,7 +85,6 @@ export const LiveDatabaseExplorer: React.FC = () => {
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        // Only surface timeout error if this is still the latest active request
         if (requestSeqRef.current === requestId) {
           setError('Query timed out waiting for Cloud SQL. Click Refresh to retry.');
         }
@@ -82,6 +102,7 @@ export const LiveDatabaseExplorer: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    setSearchQuery('');
     fetchTableData(activeTable);
     return () => {
       if (abortControllerRef.current) {
@@ -89,6 +110,15 @@ export const LiveDatabaseExplorer: React.FC = () => {
       }
     };
   }, [activeTable, fetchTableData]);
+
+  useEffect(() => {
+    if (!selectedJsonb) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedJsonb(null);
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [selectedJsonb]);
 
   const handleSeedDemoData = async () => {
     setSeeding(true);
@@ -116,124 +146,217 @@ export const LiveDatabaseExplorer: React.FC = () => {
     }
   };
 
+  const handleCopyJsonb = () => {
+    if (!selectedJsonb) return;
+    navigator.clipboard.writeText(JSON.stringify(selectedJsonb.value, null, 2));
+    setCopiedJsonb(true);
+    window.setTimeout(() => setCopiedJsonb(false), 1800);
+  };
+
   const currentMeta = TABLE_CONFIG[activeTable];
+  const filteredRows = useMemo(
+    () => filterTableRecords(data, searchQuery),
+    [data, searchQuery]
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header Card */}
-      <div className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 text-xs font-medium mb-1">
-              <Database className="w-4 h-4" />
-              <span>Cloud SQL PostgreSQL</span>
-            </div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Live Relational Database Explorer
-            </h1>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-              Inspect live PostgreSQL tables managed via Drizzle ORM.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              id="refresh-db-btn"
-              type="button"
-              onClick={() => fetchTableData(activeTable)}
-              disabled={loading || seeding}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
-              <span>Refresh</span>
-            </button>
-
-            <button
-              id="seed-demo-data-btn"
-              type="button"
-              onClick={handleSeedDemoData}
-              disabled={seeding || loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors disabled:opacity-50 whitespace-nowrap shadow-xs"
-            >
-              <Sprout className={`w-3.5 h-3.5 ${seeding ? 'animate-pulse' : ''}`} />
-              <span>{seeding ? 'Seeding...' : 'Seed Demo Data'}</span>
-            </button>
-
-            {lastRefreshed && (
-              <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 hidden md:inline ml-1">
-                Synced {lastRefreshed}
-              </span>
-            )}
-          </div>
+      {/* Unified Unboxed Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Live Database Explorer
+          </h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Inspect live Cloud SQL PostgreSQL tables managed via Drizzle ORM.
+          </p>
         </div>
 
-        {/* Seed Confirmation or Error Banner */}
-        {seedMessage && (
-          <div
-            role="status"
-            className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-700/50 text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2"
-          >
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>{seedMessage}</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {lastRefreshed && !loading && (
+            <span className="text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400 hidden md:inline mr-1">
+              Synced {lastRefreshed}
+            </span>
+          )}
 
-        {error && (
-          <div
-            role="alert"
-            className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-700/50 text-xs text-rose-800 dark:text-rose-200 flex items-center justify-between gap-3"
+          <button
+            id="refresh-db-btn"
+            type="button"
+            onClick={() => fetchTableData(activeTable)}
+            disabled={loading || seeding}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 transition-colors disabled:opacity-50 whitespace-nowrap shrink-0"
           >
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-              <span>{error}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => fetchTableData(activeTable)}
-              className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 font-medium shrink-0"
-            >
-              Retry
-            </button>
-          </div>
-        )}
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
+            <span>Refresh</span>
+          </button>
 
-        {/* Table Selector Tabs */}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          {(Object.keys(TABLE_CONFIG) as TableKey[]).map((key) => {
-            const isActive = activeTable === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setActiveTable(key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium font-mono transition-colors whitespace-nowrap ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800'
-                }`}
-              >
-                {TABLE_CONFIG[key].label}
-              </button>
-            );
-          })}
+          <button
+            id="seed-demo-data-btn"
+            type="button"
+            onClick={handleSeedDemoData}
+            disabled={seeding || loading}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors disabled:opacity-50 whitespace-nowrap shrink-0 shadow-xs"
+          >
+            <Sprout className={`w-3.5 h-3.5 ${seeding ? 'animate-pulse' : ''}`} />
+            <span>{seeding ? 'Seeding...' : 'Seed Demo Data'}</span>
+          </button>
         </div>
+      </div>
+
+      {/* Seed Confirmation or Error Banner */}
+      {seedMessage && (
+        <div
+          role="status"
+          className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-700/50 text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>{seedMessage}</span>
+        </div>
+      )}
+
+      {error && (
+        <div
+          role="alert"
+          className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-700/50 text-xs text-rose-800 dark:text-rose-200 flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => fetchTableData(activeTable)}
+            className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 font-medium shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Clean Underlined Table Tab Bar (matches Top Navigation motif) */}
+      <div
+        role="tablist"
+        aria-label="PostgreSQL tables"
+        className="flex items-center gap-6 border-b border-slate-200 dark:border-slate-800 overflow-x-auto"
+      >
+        {(Object.keys(TABLE_CONFIG) as TableKey[]).map((key) => {
+          const isActive = activeTable === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveTable(key)}
+              className={`pb-3 pt-1 text-xs font-mono border-b-2 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                isActive
+                  ? 'border-indigo-600 dark:border-indigo-400 text-indigo-700 dark:text-white font-semibold'
+                  : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              {TABLE_CONFIG[key].label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Table Data Card */}
       <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
-        <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between text-xs">
+        <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="font-mono text-indigo-700 dark:text-indigo-400 font-semibold">
               {currentMeta.sqlName}
             </span>
-            <span className="text-slate-600 dark:text-slate-400 font-mono tabular-nums">
-              ({data.length} {data.length === 1 ? 'record' : 'records'})
+            {!loading && (
+              <span
+                data-testid="db-record-count"
+                className="text-slate-600 dark:text-slate-400 font-mono tabular-nums"
+              >
+                {searchQuery.trim()
+                  ? `(${filteredRows.length} of ${data.length} ${data.length === 1 ? 'record' : 'records'})`
+                  : `(${data.length} ${data.length === 1 ? 'record' : 'records'})`}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 flex-1 sm:flex-initial justify-end">
+            {!loading && data.length > 0 && (
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="db-table-search-input"
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Filter ${currentMeta.sqlName} rows...`}
+                  aria-label={`Filter ${currentMeta.sqlName} rows`}
+                  className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear table filter"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+              {loading ? 'Loading...' : 'PostgreSQL Live'}
             </span>
           </div>
-          <span className="text-xs text-slate-600 dark:text-slate-400">
-            {loading ? 'Loading...' : 'PostgreSQL Live'}
-          </span>
         </div>
+
+        {/* Expandable JSONB Inspector Drawer */}
+        {selectedJsonb && (
+          <div
+            data-testid="jsonb-inspector"
+            className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/80 space-y-2.5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <Braces className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                  {selectedJsonb.table}.{selectedJsonb.column}
+                </span>
+                <span className="text-slate-500 dark:text-slate-400 truncate">
+                  · {selectedJsonb.rowLabel}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyJsonb}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px] font-medium whitespace-nowrap transition-colors"
+                >
+                  {copiedJsonb ? (
+                    <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                  <span>{copiedJsonb ? 'Copied' : 'Copy JSON'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedJsonb(null)}
+                  aria-label="Close JSONB inspector"
+                  className="p-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <pre className="p-3.5 rounded-xl bg-slate-900 dark:bg-slate-950 border border-slate-800 text-xs font-mono text-emerald-300 overflow-x-auto max-h-56 leading-relaxed">
+              {JSON.stringify(selectedJsonb.value, null, 2)}
+            </pre>
+          </div>
+        )}
 
         {loading ? (
           <div className="p-6 space-y-3" aria-busy="true" aria-label="Loading table rows">
@@ -262,9 +385,25 @@ export const LiveDatabaseExplorer: React.FC = () => {
               <span>{seeding ? 'Seeding...' : 'Seed Demo Data'}</span>
             </button>
           </div>
+        ) : filteredRows.length === 0 ? (
+          <div className="py-10 px-6 text-center space-y-2 text-xs text-slate-600 dark:text-slate-400">
+            <p>
+              No rows in <code className="font-mono">{currentMeta.sqlName}</code> match &ldquo;{searchQuery}&rdquo;.
+            </p>
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+            >
+              Clear filter
+            </button>
+          </div>
         ) : (
           <div className="overflow-x-auto max-h-[520px]">
-            <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+            <table
+              data-testid="live-db-table"
+              className="w-full text-left text-xs text-slate-700 dark:text-slate-300"
+            >
               <thead className="bg-slate-100 dark:bg-slate-900/80 text-[11px] font-mono text-slate-700 dark:text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   {Object.keys(data[0]).map((col) => (
@@ -275,38 +414,76 @@ export const LiveDatabaseExplorer: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-mono text-xs tabular-nums">
-                {data.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
-                    {Object.entries(row).map(([key, val], vIdx) => {
-                      let displayText: React.ReactNode = String(val);
-                      if (typeof val === 'object' && val !== null) {
-                        displayText = JSON.stringify(val);
-                      } else if (val === null || val === undefined) {
-                        displayText = <span className="text-slate-400 dark:text-slate-600">NULL</span>;
-                      }
+                {filteredRows.map((row, idx) => {
+                  const rowLabel = String(row.name ?? row.documentTitle ?? row.document_title ?? row.title ?? row.id ?? `Row ${idx + 1}`);
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
+                      {Object.entries(row).map(([key, val], vIdx) => {
+                        const isJsonObject = typeof val === 'object' && val !== null;
+                        if (isJsonObject) {
+                          const compact = JSON.stringify(val);
+                          const isSelected =
+                            selectedJsonb?.column === key && selectedJsonb?.rowLabel === rowLabel;
+                          return (
+                            <td key={vIdx} className="px-3.5 py-2 max-w-[240px]">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedJsonb(
+                                    isSelected
+                                      ? null
+                                      : {
+                                          table: currentMeta.sqlName,
+                                          rowLabel,
+                                          column: key,
+                                          value: val,
+                                        }
+                                  )
+                                }
+                                title="Inspect JSONB payload"
+                                className={`inline-flex items-center gap-1.5 max-w-full px-2 py-0.5 rounded-md border text-left transition-colors ${
+                                  isSelected
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/70 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300'
+                                    : 'bg-slate-100/80 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-indigo-400 dark:hover:border-indigo-600'
+                                }`}
+                              >
+                                <Braces className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                                <span className="truncate">{compact}</span>
+                              </button>
+                            </td>
+                          );
+                        }
 
-                      return (
-                        <td key={vIdx} className="px-3.5 py-2.5 max-w-[220px] truncate" title={String(val)}>
-                          {key === 'tier' ? (
-                            <span className="font-semibold text-indigo-700 dark:text-indigo-400">
-                              Tier {String(val)}
-                            </span>
-                          ) : key === 'severity' ? (
-                            <span className="font-semibold text-rose-700 dark:text-rose-400">
-                              {String(val)}
-                            </span>
-                          ) : key === 'contractStatus' || key === 'contract_status' ? (
-                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                              {String(val)}
-                            </span>
+                        const displayText =
+                          val === null || val === undefined ? (
+                            <span className="text-slate-400 dark:text-slate-600">NULL</span>
                           ) : (
-                            displayText
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                            String(val)
+                          );
+
+                        return (
+                          <td key={vIdx} className="px-3.5 py-2.5 max-w-[220px] truncate" title={String(val ?? 'NULL')}>
+                            {key === 'tier' ? (
+                              <span className="font-semibold text-indigo-700 dark:text-indigo-400">
+                                Tier {String(val)}
+                              </span>
+                            ) : key === 'severity' ? (
+                              <span className="font-semibold text-rose-700 dark:text-rose-400">
+                                {String(val)}
+                              </span>
+                            ) : key === 'contractStatus' || key === 'contract_status' ? (
+                              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                {String(val)}
+                              </span>
+                            ) : (
+                              displayText
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -315,3 +492,4 @@ export const LiveDatabaseExplorer: React.FC = () => {
     </div>
   );
 };
+

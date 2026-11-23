@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
-  TerminalSquare,
   Download,
   Copy,
   Check,
@@ -16,6 +15,7 @@ import {
   MessageSquareText,
   X,
   Pencil,
+  Columns3,
 } from 'lucide-react';
 import {
   SQL_QUERY_PRESETS,
@@ -35,6 +35,8 @@ import {
   upsertSqlHistory,
   validateReadOnlySqlQuery,
 } from '../lib/sql-runner.ts';
+import { POSTGRES_TABLE_CATALOG } from '../lib/ui-formatters.ts';
+import { SqlCodeEditor } from './SqlCodeEditor.tsx';
 
 interface SqlExplainApiResponse {
   model: string;
@@ -85,7 +87,10 @@ export const SqlQueryConsole: React.FC = () => {
   const [copiedExplanation, setCopiedExplanation] = useState<boolean>(false);
 
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
+  const [selectedTablePreview, setSelectedTablePreview] = useState<string | null>(null);
+  const [hasRightOverflow, setHasRightOverflow] = useState<boolean>(false);
 
   const [copiedJson, setCopiedJson] = useState<boolean>(false);
   const [exportedFormat, setExportedFormat] = useState<'csv' | 'json' | null>(null);
@@ -93,6 +98,16 @@ export const SqlQueryConsole: React.FC = () => {
     column: string;
     direction: 'asc' | 'desc';
   } | null>(null);
+
+  const updateTableOverflowShadow = useCallback(() => {
+    const el = tableScrollRef.current;
+    if (!el) {
+      setHasRightOverflow(false);
+      return;
+    }
+    const remaining = el.scrollWidth - el.clientWidth - el.scrollLeft;
+    setHasRightOverflow(remaining > 6);
+  }, []);
 
   const runSql = useCallback(
     async (queryText: string, options?: { recordHistory?: boolean }) => {
@@ -262,6 +277,12 @@ export const SqlQueryConsole: React.FC = () => {
     }
   }, [chartMeta, viewMode]);
 
+  useEffect(() => {
+    updateTableOverflowShadow();
+    window.addEventListener('resize', updateTableOverflowShadow);
+    return () => window.removeEventListener('resize', updateTableOverflowShadow);
+  }, [result, viewMode, updateTableOverflowShadow]);
+
   const handleSortColumn = (col: string) => {
     setSortConfig((prev) => {
       if (prev?.column === col) {
@@ -329,11 +350,19 @@ export const SqlQueryConsole: React.FC = () => {
     window.setTimeout(() => setCopiedExplanation(false), 2000);
   };
 
-  const handleQuickTableSelect = (tableName: string) => {
-    const query = `SELECT * FROM ${tableName} ORDER BY 1 LIMIT 25;`;
+  const handleInsertTableTemplate = (tableName: string, autoRun: boolean) => {
+    const schema = POSTGRES_TABLE_CATALOG[tableName];
+    const query = schema
+      ? schema.sampleSelect
+      : `SELECT * FROM ${tableName} ORDER BY 1 LIMIT 25;`;
     setSqlInput(query);
     setViewMode('table');
-    runSql(query);
+    if (autoRun) {
+      runSql(query);
+    } else {
+      setEditorNotice(`Inserted SELECT template for ${tableName}`);
+      window.requestAnimationFrame(() => editorRef.current?.focus());
+    }
   };
 
   const handleEditHistoryItem = (item: SqlHistoryItem, displayNumber: number) => {
@@ -379,69 +408,131 @@ export const SqlQueryConsole: React.FC = () => {
     }
   };
 
+  const activeSchemaSummary = selectedTablePreview
+    ? POSTGRES_TABLE_CATALOG[selectedTablePreview] ?? null
+    : null;
+
   return (
     <div className="space-y-6">
-      {/* Header & Quick Table Selector */}
-      <div className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 text-xs font-medium mb-1">
-              <TerminalSquare className="w-4 h-4" />
-              <span>PostgreSQL Interactive Console</span>
-            </div>
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              SQL Query Workbench
-            </h1>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-              Write and execute read-only SQL queries directly against the connected PostgreSQL instance.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              id="toggle-sql-history-btn"
-              type="button"
-              onClick={() => setShowHistorySidebar(!showHistorySidebar)}
-              aria-expanded={showHistorySidebar}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors whitespace-nowrap ${
-                showHistorySidebar
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>
-                Query History ({history.length}/{SQL_HISTORY_MAX_ITEMS})
-              </span>
-            </button>
-          </div>
+      {/* Unified Unboxed Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            SQL Query Workbench
+          </h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Write and execute read-only SQL queries directly against the connected PostgreSQL instance.
+          </p>
         </div>
 
-        {/* Quick Inspect Table Shortcuts */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 text-xs">
-          <span className="text-slate-600 dark:text-slate-400 font-medium mr-1">
-            Tables:
-          </span>
-          {QUICK_TABLES.map((tbl) => (
-            <button
-              key={tbl}
-              type="button"
-              onClick={() => handleQuickTableSelect(tbl)}
-              className="px-2.5 py-1 rounded-lg font-mono text-xs bg-slate-100 dark:bg-slate-950 hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-white border border-slate-200 dark:border-slate-800 transition-colors"
-            >
-              {tbl}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            id="toggle-sql-history-btn"
+            type="button"
+            onClick={() => setShowHistorySidebar(!showHistorySidebar)}
+            aria-expanded={showHistorySidebar}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors whitespace-nowrap shrink-0 ${
+              showHistorySidebar
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <History className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>
+              Query History ({history.length}/{SQL_HISTORY_MAX_ITEMS})
+            </span>
+          </button>
         </div>
       </div>
 
-      {/* Main Grid: Editor + Results (Left) and Query History Sidebar (Right) */}
+      {/* Top Row: SQL Editor (Left) + Query History Sidebar (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div
-          className={`${showHistorySidebar ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-6 min-w-0`}
-        >
+        <div className={`${showHistorySidebar ? 'lg:col-span-8' : 'lg:col-span-12'} min-w-0`}>
           {/* SQL Editor Card */}
           <div className="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
+            {/* Quick Table Chips + Expandable Column Schema Preview */}
+            <div className="space-y-2.5 pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-slate-600 dark:text-slate-400 font-medium mr-1">
+                  Tables:
+                </span>
+                {QUICK_TABLES.map((tbl) => {
+                  const isOpen = selectedTablePreview === tbl;
+                  return (
+                    <button
+                      key={tbl}
+                      type="button"
+                      aria-expanded={isOpen}
+                      onClick={() => setSelectedTablePreview(isOpen ? null : tbl)}
+                      className={`px-2.5 py-1 rounded-lg font-mono text-xs border transition-colors whitespace-nowrap ${
+                        isOpen
+                          ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 font-semibold'
+                          : 'bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      {tbl}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeSchemaSummary && (
+                <div
+                  data-testid="table-schema-preview"
+                  className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Columns3 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                        {activeSchemaSummary.name}
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400 truncate">
+                        · {activeSchemaSummary.description}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleInsertTableTemplate(activeSchemaSummary.name, false)}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-[11px] font-medium whitespace-nowrap transition-colors"
+                      >
+                        Insert SELECT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInsertTableTemplate(activeSchemaSummary.name, true)}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-medium whitespace-nowrap transition-colors"
+                      >
+                        Run Preview
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTablePreview(null)}
+                        aria-label="Close table schema preview"
+                        className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 font-mono text-[11px] pt-1 border-t border-slate-200/70 dark:border-slate-800/70">
+                    {activeSchemaSummary.columns.map((col) => (
+                      <span key={col.name} className="inline-flex items-center gap-1">
+                        <span className="text-slate-900 dark:text-slate-200 font-medium">{col.name}</span>
+                        <span className="text-sky-700 dark:text-sky-400">{col.type}</span>
+                        {col.note && (
+                          <span className="text-slate-400 dark:text-slate-500">({col.note})</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Preset Queries */}
             <div className="space-y-2">
               <span className="block text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -458,7 +549,7 @@ export const SqlQueryConsole: React.FC = () => {
                       setViewMode('table');
                       runSql(preset.sql);
                     }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-white border border-slate-200 dark:border-slate-700/80 transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-indigo-700 dark:hover:text-white border border-slate-200 dark:border-slate-700/80 transition-colors whitespace-nowrap"
                   >
                     {preset.label}
                   </button>
@@ -466,7 +557,7 @@ export const SqlQueryConsole: React.FC = () => {
               </div>
             </div>
 
-            {/* Code Editor Textarea */}
+            {/* Syntax-Highlighted SQL Code Editor with Line Number Gutter */}
             <div className="space-y-1.5">
               <label
                 htmlFor="sql-query-editor"
@@ -487,19 +578,16 @@ export const SqlQueryConsole: React.FC = () => {
                   READ ONLY · statement_timeout=8s · max 200 rows
                 </span>
               </label>
-              <textarea
-                ref={editorRef}
+              <SqlCodeEditor
                 id="sql-query-editor"
+                editorRef={editorRef}
                 value={sqlInput}
-                onChange={(e) => {
-                  setSqlInput(e.target.value);
+                onChange={(next) => {
+                  setSqlInput(next);
                   if (editorNotice) setEditorNotice(null);
                 }}
                 onKeyDown={handleKeyDown}
-                rows={7}
-                spellCheck={false}
                 placeholder="SELECT * FROM vendors ORDER BY tier;"
-                className="w-full font-mono text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-700 rounded-xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500 leading-relaxed resize-y"
               />
             </div>
 
@@ -545,6 +633,144 @@ export const SqlQueryConsole: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Right Sidebar: Query History (Last 10 Successful Queries) */}
+        {showHistorySidebar && (
+          <aside
+            aria-label="Query History"
+            data-testid="sql-history-sidebar"
+            className="lg:col-span-4 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-xs"
+          >
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span>Query History</span>
+                </h2>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums">
+                  Saved locally · Last {SQL_HISTORY_MAX_ITEMS} queries · {history.length} saved
+                </p>
+              </div>
+
+              {history.length > 0 && (
+                <button
+                  id="clear-sql-history-btn"
+                  type="button"
+                  onClick={handleClearHistory}
+                  title="Clear saved query history"
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors whitespace-nowrap"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
+
+            {history.length > 0 && (
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  id="sql-history-filter"
+                  type="text"
+                  value={historyFilter}
+                  onChange={(e) => setHistoryFilter(e.target.value)}
+                  placeholder="Filter past SQL queries..."
+                  aria-label="Filter past SQL queries"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                />
+              </div>
+            )}
+
+            {history.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
+                Execute a SQL query to start tracking your last {SQL_HISTORY_MAX_ITEMS} successful searches.
+              </div>
+            ) : filteredHistory.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+                No history entries match &ldquo;{historyFilter}&rdquo;.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-0.5">
+                {filteredHistory.map((item, idx) => {
+                  const isLoadedInEditor = item.sql.trim() === sqlInput.trim();
+                  return (
+                    <div
+                      key={item.id}
+                      data-testid="sql-history-item"
+                      className={`w-full text-left p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border transition-colors space-y-2.5 ${
+                        isLoadedInEditor
+                          ? 'border-indigo-400 dark:border-indigo-600/80'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                        <span>
+                          #{idx + 1} · {item.executedAt}
+                        </span>
+                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                          {item.rowCount} rows · {item.executionTimeMs.toFixed(1)} ms
+                        </span>
+                      </div>
+
+                      <p
+                        title={item.sql}
+                        className="text-[11px] font-mono text-slate-800 dark:text-slate-200 break-words line-clamp-2 leading-relaxed overflow-hidden"
+                      >
+                        {item.sql.replace(/\s+/g, ' ').trim()}
+                      </p>
+
+                      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/80 dark:border-slate-800/80">
+                        <button
+                          type="button"
+                          data-testid="sql-history-delete-btn"
+                          aria-label={`Remove query #${idx + 1} from history`}
+                          title="Remove from history"
+                          onClick={() => handleDeleteHistoryItem(item.id)}
+                          className="p-1 rounded-md text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            data-testid="sql-history-edit-btn"
+                            aria-label={`Edit query #${idx + 1} in editor`}
+                            onClick={() => handleEditHistoryItem(item, idx + 1)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors whitespace-nowrap"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            data-testid="sql-history-rerun-btn"
+                            aria-label={`Re-run query #${idx + 1}`}
+                            onClick={() => {
+                              setSqlInput(item.sql);
+                              setViewMode('table');
+                              runSql(item.sql);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 transition-colors whitespace-nowrap"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>Re-run</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+
+      {/* Full-Width Bottom Row: Error Alert + AI Explanation + Query Results Table */}
+      <div className="space-y-6">
 
           {/* Error Alert Banner */}
           {error && (
@@ -734,15 +960,15 @@ export const SqlQueryConsole: React.FC = () => {
                     <span>{explaining ? 'Explaining...' : 'Explain Results'}</span>
                   </button>
 
-                  {/* View Switcher: Table vs Bar Chart */}
-                  <div className="flex items-center bg-white dark:bg-slate-950 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+                  {/* Neutral Segmented Control: Table vs Bar Chart */}
+                  <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
                     <button
                       id="sql-view-table-btn"
                       type="button"
                       onClick={() => setViewMode('table')}
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
                         viewMode === 'table'
-                          ? 'bg-indigo-600 text-white font-semibold'
+                          ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold shadow-xs'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -761,7 +987,7 @@ export const SqlQueryConsole: React.FC = () => {
                       }
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors disabled:opacity-40 whitespace-nowrap ${
                         viewMode === 'chart'
-                          ? 'bg-indigo-600 text-white font-semibold'
+                          ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold shadow-xs'
                           : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -872,11 +1098,16 @@ export const SqlQueryConsole: React.FC = () => {
                   })()}
                 </div>
               ) : (
-                <div className="overflow-x-auto max-h-[500px]">
-                  <table
-                    data-testid="sql-results-table"
-                    className="w-full text-left text-xs text-slate-700 dark:text-slate-300"
+                <div className="relative">
+                  <div
+                    ref={tableScrollRef}
+                    onScroll={updateTableOverflowShadow}
+                    className="overflow-x-auto max-h-[520px]"
                   >
+                    <table
+                      data-testid="sql-results-table"
+                      className="w-full text-left text-xs text-slate-700 dark:text-slate-300"
+                    >
                     <thead className="bg-slate-100 dark:bg-slate-900/90 text-[11px] font-mono text-slate-700 dark:text-slate-300 uppercase tracking-wider sticky top-0 border-b border-slate-200 dark:border-slate-800">
                       <tr>
                         {result.columns.map((col) => (
@@ -947,145 +1178,19 @@ export const SqlQueryConsole: React.FC = () => {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
+                  {hasRightOverflow && (
+                    <div
+                      aria-hidden="true"
+                      data-testid="table-right-overflow-shadow"
+                      className="pointer-events-none absolute top-0 right-0 bottom-0 w-10 bg-gradient-to-l from-white via-white/70 dark:from-slate-950 dark:via-slate-950/70 to-transparent"
+                    />
+                  )}
                 </div>
               )}
             </div>
           )}
-        </div>
-
-        {/* Right Sidebar: Query History (Last 10 Successful Queries) */}
-        {showHistorySidebar && (
-          <aside
-            aria-label="Query History"
-            data-testid="sql-history-sidebar"
-            className="lg:col-span-4 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-xs"
-          >
-            <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <span>Query History</span>
-                </h2>
-                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 tabular-nums">
-                  Saved locally · Last {SQL_HISTORY_MAX_ITEMS} queries · {history.length} saved
-                </p>
-              </div>
-
-              {history.length > 0 && (
-                <button
-                  id="clear-sql-history-btn"
-                  type="button"
-                  onClick={handleClearHistory}
-                  title="Clear saved query history"
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors whitespace-nowrap"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Clear</span>
-                </button>
-              )}
-            </div>
-
-            {history.length > 0 && (
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  id="sql-history-filter"
-                  type="text"
-                  value={historyFilter}
-                  onChange={(e) => setHistoryFilter(e.target.value)}
-                  placeholder="Filter past SQL queries..."
-                  aria-label="Filter past SQL queries"
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-                />
-              </div>
-            )}
-
-            {history.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-                Execute a SQL query to start tracking your last {SQL_HISTORY_MAX_ITEMS} successful searches.
-              </div>
-            ) : filteredHistory.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
-                No history entries match &ldquo;{historyFilter}&rdquo;.
-              </div>
-            ) : (
-              <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-0.5">
-                {filteredHistory.map((item, idx) => {
-                  const isLoadedInEditor = item.sql.trim() === sqlInput.trim();
-                  return (
-                    <div
-                      key={item.id}
-                      data-testid="sql-history-item"
-                      className={`w-full text-left p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border transition-colors space-y-2.5 ${
-                        isLoadedInEditor
-                          ? 'border-indigo-400 dark:border-indigo-600/80'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">
-                        <span>
-                          #{idx + 1} · {item.executedAt}
-                        </span>
-                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                          {item.rowCount} rows · {item.executionTimeMs.toFixed(1)} ms
-                        </span>
-                      </div>
-
-                      <p
-                        title={item.sql}
-                        className="text-[11px] font-mono text-slate-800 dark:text-slate-200 break-words line-clamp-2 leading-relaxed overflow-hidden"
-                      >
-                        {item.sql.replace(/\s+/g, ' ').trim()}
-                      </p>
-
-                      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/80 dark:border-slate-800/80">
-                        <button
-                          type="button"
-                          data-testid="sql-history-delete-btn"
-                          aria-label={`Remove query #${idx + 1} from history`}
-                          title="Remove from history"
-                          onClick={() => handleDeleteHistoryItem(item.id)}
-                          className="p-1 rounded-md text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            data-testid="sql-history-edit-btn"
-                            aria-label={`Edit query #${idx + 1} in editor`}
-                            onClick={() => handleEditHistoryItem(item, idx + 1)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors whitespace-nowrap"
-                          >
-                            <Pencil className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            data-testid="sql-history-rerun-btn"
-                            aria-label={`Re-run query #${idx + 1}`}
-                            onClick={() => {
-                              setSqlInput(item.sql);
-                              setViewMode('table');
-                              runSql(item.sql);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 transition-colors whitespace-nowrap"
-                          >
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>Re-run</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </aside>
-        )}
       </div>
     </div>
   );
